@@ -1,0 +1,232 @@
+.
+├── .env.development
+├── .env.production
+├── .git
+│   ├── COMMIT_EDITMSG
+│   ├── HEAD
+│   ├── branches
+│   ├── config
+│   ├── description
+│   ├── hooks
+│   │   ├── applypatch-msg.sample
+│   │   ├── commit-msg.sample
+│   │   ├── fsmonitor-watchman.sample
+│   │   ├── post-update.sample
+│   │   ├── pre-applypatch.sample
+│   │   ├── pre-commit.sample
+│   │   ├── pre-merge-commit.sample
+│   │   ├── pre-push.sample
+│   │   ├── pre-rebase.sample
+│   │   ├── pre-receive.sample
+│   │   ├── prepare-commit-msg.sample
+│   │   ├── push-to-checkout.sample
+│   │   └── update.sample
+│   ├── index
+│   ├── info
+│   │   └── exclude
+│   ├── logs
+│   │   ├── HEAD
+│   │   └── refs
+│   │       ├── heads
+│   │       │   └── main
+│   │       └── remotes
+│   │           └── origin
+│   │               └── main
+│   ├── objects
+│   │   ├── 19
+│   │   │   ├── 59017f9759817077d997951895de28c9e8befe
+│   │   │   └── c85c8106e32a6a5d0374cbc75b4fb8e4a24335
+│   │   ├── 22
+│   │   │   └── b3401a7d53b9274dcd93c8e7aba9499454a4e4
+│   │   ├── 2d
+│   │   │   └── 48d7b93865d1012aeb92916b11d8df607f7819
+│   │   ├── 56
+│   │   │   └── 7d7d5a288936b41b2db9f017ea1dc5da8d9f48
+│   │   ├── 65
+│   │   │   └── cf594d1cdf20c922b8da9e67eff693c62ea952
+│   │   ├── 6d
+│   │   │   └── 624f78de49a363e03cd2f9ff17f3254afd79d6
+│   │   ├── 94
+│   │   │   └── 002f75b2821c4573c7be9e027cf8eb2388475c
+│   │   ├── d5
+│   │   │   └── 5389845620bd676b6cab36f6c7463e5c6db8a2
+│   │   ├── d9
+│   │   │   └── 0c767bb0a5224b8fa70c9052be213f932830ab
+│   │   ├── info
+│   │   └── pack
+│   └── refs
+│       ├── heads
+│       │   └── main
+│       ├── remotes
+│       │   └── origin
+│       │       └── main
+│       └── tags
+├── .gitignore
+├── .next
+│   ├── BUILD_ID
+│   ├── build-manifest.json
+│   ├── cache
+│   │   ├── .previewinfo
+│   │   ├── .rscinfo
+│   │   ├── swc
+│   │   │   └── plugins
+│   │   │       └── linux_x86_64_18.0.0
+│   │   └── webpack
+│   │       ├── client-production
+│   │       │   ├── 0.pack
+│   │       │   ├── 1.pack
+│   │       │   ├── 2.pack
+│   │       │   ├── index.pack
+│   │       │   └── index.pack.old
+│   │       ├── edge-server-production
+│   │       │   ├── 0.pack
+│   │       │   └── index.pack
+│   │       └── server-production
+│   │           ├── 0.pack
+│   │           ├── 1.pack
+│   │           ├── 2.pack
+│   │           ├── 3.pack
+│   │           ├── 4.pack
+│   │           ├── 5.pack
+│   │           ├── 6.pack
+│   │           ├── index.pack
+│   │           └── index.pack.old
+│   ├── diagnostics
+│   │   ├── build-diagnostics.json
+│   │   └── framework.json
+│   ├── dynamic-css-manifest.json
+│   ├── export-marker.json
+│   ├── images-manifest.json
+│   ├── next-minimal-server.js.nft.json
+│   ├── next-server.js.nft.json
+│   ├── package.json
+│   ├── prerender-manifest.json
+│   ├── react-loadable-manifest.json
+│   ├── required-server-files.json
+│   ├── routes-manifest.json
+│   ├── server
+│   │   ├── chunks
+│   │   │   ├── 169.js
+│   │   │   ├── 233.js
+│   │   │   ├── 317.js
+│   │   │   └── 871.js
+│   │   ├── dynamic-css-manifest.js
+│   │   ├── functions-config-manifest.json
+│   │   ├── interception-route-rewrite-manifest.js
+│   │   ├── middleware-build-manifest.js
+│   │   ├── middleware-manifest.json
+│   │   ├── middleware-react-loadable-manifest.js
+│   │   ├── next-font-manifest.js
+│   │   ├── next-font-manifest.json
+│   │   ├── pages
+│   │   │   ├── 404.html
+│   │   │   ├── 500.html
+│   │   │   ├── _app.js
+│   │   │   ├── _app.js.nft.json
+│   │   │   ├── _document.js
+│   │   │   ├── _document.js.nft.json
+│   │   │   ├── _error.js
+│   │   │   ├── _error.js.nft.json
+│   │   │   ├── api
+│   │   │   │   ├── ai
+│   │   │   │   │   ├── chat.js
+│   │   │   │   │   └── chat.js.nft.json
+│   │   │   │   ├── auth
+│   │   │   │   │   ├── [...nextauth].js
+│   │   │   │   │   ├── [...nextauth].js.nft.json
+│   │   │   │   │   ├── signup.js
+│   │   │   │   │   └── signup.js.nft.json
+│   │   │   │   ├── hello.js
+│   │   │   │   ├── hello.js.nft.json
+│   │   │   │   ├── upload
+│   │   │   │   │   ├── [...nextauth].js
+│   │   │   │   │   └── [...nextauth].js.nft.json
+│   │   │   │   ├── users.js
+│   │   │   │   └── users.js.nft.json
+│   │   │   ├── auth
+│   │   │   │   ├── signin.html
+│   │   │   │   ├── signin.js.nft.json
+│   │   │   │   ├── signup.html
+│   │   │   │   └── signup.js.nft.json
+│   │   │   ├── chat.js
+│   │   │   ├── chat.js.nft.json
+│   │   │   ├── index.js
+│   │   │   ├── index.js.nft.json
+│   │   │   ├── upload.js
+│   │   │   └── upload.js.nft.json
+│   │   ├── pages-manifest.json
+│   │   ├── webpack-api-runtime.js
+│   │   └── webpack-runtime.js
+│   ├── static
+│   │   ├── chunks
+│   │   │   ├── 707-8935034125c3d0bd.js
+│   │   │   ├── framework-b1e5f14688f9ffe6.js
+│   │   │   ├── main-36931aa16272d372.js
+│   │   │   ├── pages
+│   │   │   │   ├── _app-9ccadb934b519984.js
+│   │   │   │   ├── _error-5366f00fee9a89ba.js
+│   │   │   │   ├── auth
+│   │   │   │   │   ├── signin-9e30774d2a42c188.js
+│   │   │   │   │   └── signup-b43c85920ee4d02a.js
+│   │   │   │   ├── chat-f0cc668163cf4bbb.js
+│   │   │   │   ├── index-69a60a11d4302255.js
+│   │   │   │   └── upload-72b867f2ebf59416.js
+│   │   │   ├── polyfills-42372ed130431b0a.js
+│   │   │   └── webpack-8cac0b4b405cede1.js
+│   │   └── mAb4EQHyqptweXx5YOPjx
+│   │       ├── _buildManifest.js
+│   │       └── _ssgManifest.js
+│   ├── trace
+│   └── types
+│       ├── routes.d.ts
+│       └── validator.ts
+├── README.md
+├── config
+├── ecosystem.config.js
+├── jsconfig.json
+├── logs
+├── next.config.js
+├── package-lock.json
+├── package.json
+├── prisma
+│   ├── dev.db
+│   └── schema.prisma
+├── project-structure.txt
+├── src
+│   ├── components
+│   ├── lib
+│   │   └── auth.js
+│   ├── pages
+│   │   ├── api
+│   │   │   ├── ai
+│   │   │   │   └── chat.js
+│   │   │   ├── auth
+│   │   │   │   ├── [...nextauth].js
+│   │   │   │   └── signup.js
+│   │   │   ├── hello.js
+│   │   │   ├── upload
+│   │   │   │   └── [...nextauth].js
+│   │   │   └── users.js
+│   │   ├── auth
+│   │   │   ├── signin.js
+│   │   │   └── signup.js
+│   │   ├── chat
+│   │   │   └── index.js
+│   │   ├── index.js
+│   │   ├── index.js.bak
+│   │   └── upload
+│   │       └── index.js
+│   └── styles
+├── test-db-operation.js
+├── test-deps.js
+├── test-import-absolute.js
+├── test-import.js
+├── uploads
+└── 。
+    └── log
+        └── pm2
+            ├── ai-project-combined-0.log
+            ├── ai-project-error-0.log
+            └── ai-project-out-0.log
+
+69 directories, 160 files
