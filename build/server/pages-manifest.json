@@ -1,0 +1,17 @@
+{
+  "/_app": "pages/_app.js",
+  "/_error": "pages/_error.js",
+  "/api/ai/chat": "pages/api/ai/chat.js",
+  "/api/auth/[...nextauth]": "pages/api/auth/[...nextauth].js",
+  "/api/auth/signup": "pages/api/auth/signup.js",
+  "/api/hello": "pages/api/hello.js",
+  "/api/users": "pages/api/users.js",
+  "/auth/signin": "pages/auth/signin.html",
+  "/auth/signup": "pages/auth/signup.html",
+  "/_document": "pages/_document.js",
+  "/api/upload/[...nextauth]": "pages/api/upload/[...nextauth].js",
+  "/chat": "pages/chat.js",
+  "/": "pages/index.js",
+  "/upload": "pages/upload.js",
+  "/404": "pages/404.html"
+}

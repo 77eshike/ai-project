@@ -1,0 +1,478 @@
+// src/components/chat/ChatTabBase.js
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useKnowledge } from '../../contexts/KnowledgeContext'; // 修复路径
+import LoadingIndicator from './LoadingIndicator'; // 导入组件
+import ConnectionIndicator from './ConnectionIndicator'; // 导入组件
+import MessageItem from './MessageItem'; // 导入组件
+import KnowledgeSaveModal from './KnowledgeSaveModal'; // 导入组件
+
+// 删除内联的子组件定义（因为它们现在在单独的文件中）
+// 只保留主组件逻辑
+
+const ChatTabBase = ({ 
+  user,
+  voiceEnabled, 
+  toggleVoice,
+  platformProps = {},
+  isMobile = false,
+  className = ""
+}) => {
+  const { addKnowledge } = useKnowledge();
+  
+  const [chatMessages, setChatMessages] = useState([
+    { 
+      type: 'ai', 
+      content: '您好！我是您的AI助手。我可以帮助您管理项目、解答问题或提供创意建议。请问有什么可以帮您的？', 
+      time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+      saved: false,
+      id: Date.now()
+    }
+  ]);
+  
+  const [chatInput, setChatInput] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('connected');
+  const [savingMessage, setSavingMessage] = useState(null);
+  
+  const inputRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const buttonRef = useRef(null);
+
+  // 从平台特定props获取语音相关状态和方法
+  const {
+    voiceState = {},
+    voiceError = null,
+    onToggleVoiceInput = () => {},
+    onClearVoiceError = () => {},
+    onMobileQuickTest = () => {},
+    speakText = () => {},
+    platformUI = null,
+    debugInfo = null,
+    // 移动端特有的事件和状态
+    onTouchStart = null,
+    onTouchEnd = null,
+    onTouchCancel = null,
+    isPressing = false
+  } = platformProps;
+
+  // 滚动到底部
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [chatMessages, scrollToBottom]);
+
+  // 时间格式化
+  const formatMessageTime = useCallback((time) => {
+    if (!time) return new Date().toLocaleTimeString('zh-CN');
+    if (time instanceof Date) {
+      return time.toLocaleTimeString('zh-CN', { 
+        hour: '2-digit', 
+        minute: '2-digit'
+      });
+    }
+    return time;
+  }, []);
+
+  // 保存知识点
+  const handleSaveAsKnowledge = useCallback((message) => {
+    setSavingMessage(message);
+  }, []);
+
+  const handleKnowledgeSave = useCallback((knowledgeData) => {
+    addKnowledge(knowledgeData);
+    setChatMessages(prev => prev.map(msg =>
+      msg.id === savingMessage.id ? { ...msg, saved: true } : msg
+    ));
+    setSavingMessage(null);
+  }, [addKnowledge, savingMessage]);
+
+  // 发送消息
+  const handleSendMessage = useCallback(async () => {
+    if (!chatInput.trim() || isSending) return;
+    
+    const cleanInput = chatInput.replace(/\.\.\.$/, '').replace(/🎤$/, '').trim();
+    if (!cleanInput) return;
+    
+    const userMessage = {
+      type: 'user',
+      content: cleanInput,
+      time: formatMessageTime(new Date()),
+      saved: false,
+      id: Date.now()
+    };
+    
+    setChatMessages(prev => [...prev, userMessage]);
+    setChatInput('');
+    setIsSending(true);
+    
+    try {
+      // 模拟AI响应延迟
+      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+      
+      const aiResponses = [
+        `我已经收到您的消息："${cleanInput}"。这是一个模拟回复，实际应用中会调用真实的AI API。`,
+        `关于"${cleanInput}"，我可以为您提供以下建议：首先需要明确具体需求，然后分析可能的方法。`,
+        `感谢您的提问！${cleanInput}这个问题很有意义，让我来详细解释一下。`,
+        `我理解您对"${cleanInput}"的关注，根据我的分析，有以下几点需要考虑。`
+      ];
+      
+      const aiMessage = {
+        type: 'ai',
+        content: aiResponses[Math.floor(Math.random() * aiResponses.length)],
+        time: formatMessageTime(new Date()),
+        saved: false,
+        id: Date.now() + 1
+      };
+      
+      setChatMessages(prev => [...prev, aiMessage]);
+      
+      // 语音回复（由平台控制）
+      if (voiceEnabled) {
+        speakText(aiMessage.content);
+      }
+    } catch (error) {
+      console.error('发送消息错误:', error);
+      
+      const errorMessage = {
+        type: 'ai',
+        content: `抱歉，处理您的请求时出现了问题：${error.message}`,
+        time: formatMessageTime(new Date()),
+        isError: true,
+        id: Date.now() + 1
+      };
+      
+      setChatMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsSending(false);
+    }
+  }, [chatInput, isSending, voiceEnabled, speakText, formatMessageTime]);
+
+  const handleKeyPress = useCallback((e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  }, [handleSendMessage]);
+
+  const handleClearChat = useCallback(() => {
+    setChatMessages([{
+      type: 'ai', 
+      content: '聊天记录已清空。请问有什么可以帮您的？', 
+      time: formatMessageTime(new Date()),
+      saved: false,
+      id: Date.now()
+    }]);
+  }, [formatMessageTime]);
+
+  // 语音输入按钮事件处理（支持移动端触摸事件）
+  const handleVoiceButtonInteraction = useCallback(async (e) => {
+    if (isMobile) return; // 移动端使用触摸事件，不处理点击
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (voiceState.isListening) {
+      onToggleVoiceInput();
+    } else {
+      await onToggleVoiceInput();
+    }
+  }, [isMobile, voiceState.isListening, onToggleVoiceInput]);
+
+  // 移动端触摸事件处理
+  const handleTouchEvents = useCallback(async (e) => {
+    if (!isMobile) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    switch (e.type) {
+      case 'touchstart':
+        console.log('移动端触摸开始');
+        try {
+          await onTouchStart?.(e);
+          
+          // 移动端额外处理：显示初始化状态
+          setTimeout(() => {
+            if (voiceState.waitingForPermission) {
+              console.log('移动端仍在等待权限确认...');
+            }
+          }, 1000);
+        } catch (error) {
+          console.error('移动端触摸开始错误:', error);
+        }
+        break;
+        
+      case 'touchend':
+      case 'touchcancel':
+        console.log('移动端触摸结束');
+        try {
+          onTouchEnd?.(e);
+          
+          // 移动端触摸结束后的小延迟，确保识别完成
+          setTimeout(() => {
+            if (voiceState.isListening) {
+              console.log('移动端语音识别仍在进行中...');
+            }
+          }, 500);
+        } catch (error) {
+          console.error('移动端触摸结束错误:', error);
+        }
+        break;
+    }
+  }, [isMobile, onTouchStart, onTouchEnd, onTouchCancel, voiceState]);
+
+  // 添加移动端语音识别状态监控
+  useEffect(() => {
+    if (!isMobile) return;
+    
+    // 监控语音识别状态变化
+    if (voiceState.isListening) {
+      console.log('移动端语音识别已启动');
+      
+      // 移动端：如果5秒后仍在聆听但没有结果，提示用户
+      const timeoutId = setTimeout(() => {
+        if (voiceState.isListening && !voiceState.transcript) {
+          console.log('移动端：未检测到语音输入，请检查麦克风');
+        }
+      }, 5000);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isMobile, voiceState.isListening, voiceState.transcript]);
+
+  // 消息元素渲染
+  const messageElements = chatMessages.map((message) => (
+    <MessageItem 
+      key={message.id}
+      message={message}
+      voiceEnabled={voiceEnabled} 
+      onSpeak={speakText}
+      onSaveAsKnowledge={handleSaveAsKnowledge}
+      isMobile={isMobile}
+    />
+  ));
+
+  return (
+    <div className={`bg-white shadow rounded-lg overflow-hidden h-full flex flex-col ${className}`}>
+      <div className="px-4 py-5 sm:p-6 flex-1 flex flex-col min-h-0">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-medium text-gray-900">AI助手对话</h3>
+          <div className="flex items-center space-x-4">
+            <ConnectionIndicator status={connectionStatus} />
+            <button
+              onClick={handleClearChat}
+              className="text-sm text-gray-600 hover:text-gray-800 transition-colors"
+              title="清空聊天记录"
+            >
+              清空记录
+            </button>
+            <div className="flex items-center">
+              <span className="text-sm text-gray-600 mr-2">语音播报</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  className="sr-only" 
+                  checked={voiceEnabled}
+                  onChange={(e) => toggleVoice(e.target.checked)}
+                />
+                <div className={`w-11 h-6 bg-gray-200 rounded-full transition-colors ${voiceEnabled ? 'bg-blue-600' : ''}`}></div>
+                <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${voiceEnabled ? 'transform translate-x-5' : ''}`}></div>
+              </label>
+            </div>
+          </div>
+        </div>
+        
+        {/* 平台特定UI */}
+        {platformUI}
+        
+        {/* 消息区域 */}
+        <div className="border rounded-lg flex-1 overflow-y-auto p-4 mb-4 bg-gray-50 min-h-[300px]">
+          <div className="space-y-4">
+            {messageElements}
+            {isSending && <LoadingIndicator />}
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
+        
+        {/* 输入区域 */}
+        <div className="flex space-x-2">
+          <div className="flex-1 relative">
+            <input
+              ref={inputRef}
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder={
+                voiceState.isListening ? "正在语音输入..." : 
+                isMobile ? "输入您的问题或长按麦克风使用语音输入..." :
+                "输入您的问题或需求..."
+              }
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-12"
+              disabled={isSending}
+            />
+            
+            {/* 语音输入按钮 - 支持移动端触摸事件 */}
+            {voiceState.isSupported && (
+              <button
+                ref={buttonRef}
+                onClick={isMobile ? undefined : handleVoiceButtonInteraction}
+                onTouchStart={isMobile ? handleTouchEvents : undefined}
+                onTouchEnd={isMobile ? handleTouchEvents : undefined}
+                onTouchCancel={isMobile ? handleTouchEvents : undefined}
+                disabled={isSending || voiceState.status === 'starting' || voiceState.status === 'stopping' || voiceState.waitingForPermission}
+                className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-full transition-all ${
+                  voiceState.isListening 
+                    ? 'bg-red-100 text-red-600 border-2 border-red-300 animate-pulse' 
+                    : voiceState.waitingForPermission
+                    ? 'bg-yellow-100 text-yellow-600 border-2 border-yellow-300 animate-pulse'
+                    : isPressing
+                    ? 'bg-blue-100 text-blue-600 border-2 border-blue-300'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                } ${
+                  voiceState.status === 'starting' || voiceState.status === 'stopping' || voiceState.waitingForPermission
+                    ? 'opacity-50 cursor-not-allowed' 
+                    : 'cursor-pointer'
+                }`}
+                type="button"
+                title={
+                  isMobile ? (
+                    voiceState.waitingForPermission ? '等待权限确认...' :
+                    voiceState.isListening ? '松开结束录音' : 
+                    voiceState.status === 'starting' ? '语音识别启动中...' :
+                    '长按开始说话'
+                  ) : (
+                    voiceState.waitingForPermission ? '等待权限确认...' :
+                    voiceState.isListening ? '点击停止语音输入' : 
+                    voiceState.status === 'starting' ? '语音识别启动中...' :
+                    voiceState.status === 'stopping' ? '正在停止...' :
+                    '点击开始语音输入'
+                  )
+                }
+                style={{ 
+                  touchAction: isMobile ? 'none' : 'auto',
+                  minWidth: '44px',
+                  minHeight: '44px',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none'
+                }}
+              >
+                {voiceState.waitingForPermission ? '🟡' :
+                 voiceState.isListening ? '🔴' : 
+                 voiceState.status === 'starting' ? '⏳' :
+                 isPressing ? '🔵' :
+                 '🎤'}
+              </button>
+            )}
+          </div>
+          <button
+            onClick={handleSendMessage}
+            disabled={isSending || !chatInput.trim()}
+            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          >
+            {isSending ? '发送中...' : '发送'}
+          </button>
+        </div>
+
+        {/* 按压状态指示（移动端特有） */}
+        {isMobile && isPressing && !voiceState.isListening && (
+          <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center text-blue-700">
+              <div className="flex space-x-1 mr-3">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></div>
+              </div>
+              <span className="text-sm font-medium">准备中...请继续长按</span>
+            </div>
+          </div>
+        )}
+
+        {/* 语音状态指示 */}
+        {voiceState.isListening && (
+          <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center text-green-700">
+              <div className="flex space-x-1 mr-3">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+              </div>
+              <span className="text-sm font-medium">正在聆听...请开始说话</span>
+            </div>
+            {voiceState.transcript && (
+              <div className="mt-2 text-sm text-green-600">
+                识别中: "{voiceState.transcript}"
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 权限等待指示 */}
+        {voiceState.waitingForPermission && (
+          <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center text-yellow-700">
+              <div className="flex space-x-1 mr-3">
+                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
+                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></div>
+              </div>
+              <span className="text-sm font-medium">等待权限确认...</span>
+            </div>
+          </div>
+        )}
+
+        {/* 错误提示 */}
+        {voiceError && (
+          <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex justify-between items-start">
+              <div className="flex-1">
+                <div className="text-sm text-red-700 whitespace-pre-wrap">{voiceError}</div>
+              </div>
+              <div className="flex space-x-2 ml-3">
+                <button
+                  onClick={onClearVoiceError}
+                  className="text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                >
+                  忽略
+                </button>
+                <button
+                  onClick={onMobileQuickTest}
+                  className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200"
+                >
+                  重试
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 调试信息 */}
+        {process.env.NODE_ENV === 'development' && debugInfo && (
+          <div className="mt-2 text-xs text-gray-600 bg-gray-100 p-2 rounded">
+            <div>调试信息:</div>
+            <div>平台: {platformProps.isMobile ? "移动端" : "桌面端"}</div>
+            <div>状态: {voiceState.status} | 监听: {voiceState.isListening ? '是' : '否'}</div>
+            <div>按压: {isPressing ? '是' : '否'} | 权限: {voiceState.permissionState}</div>
+            <div>支持级别: {voiceState.supportLevel}</div>
+            {voiceState.transcript && <div>识别文本: "{voiceState.transcript}"</div>}
+            {debugInfo}
+          </div>
+        )}
+      </div>
+
+      {/* 知识点保存模态框 */}
+      {savingMessage && (
+        <KnowledgeSaveModal
+          message={savingMessage}
+          onSave={handleKnowledgeSave}
+          onClose={() => setSavingMessage(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+export default ChatTabBase;

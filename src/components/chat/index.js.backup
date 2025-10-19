@@ -1,0 +1,45 @@
+// src/components/chat/index.js
+import { useState, useEffect } from 'react';
+import ChatTabDesktop from './ChatTabDesktop';
+import ChatTabMobile from './ChatTabMobile';
+import { getDeviceInfo } from '../Utils/deviceUtils';
+
+const ChatTab = ({ user, voiceEnabled, toggleVoice, className }) => {
+  const [isMobile, setIsMobile] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const timer = setTimeout(() => {
+        const deviceInfo = getDeviceInfo();
+        setIsMobile(deviceInfo.isMobile);
+        setIsLoading(false);
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    } else {
+      setIsLoading(false);
+    }
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-gray-600">检测设备环境中...</div>
+      </div>
+    );
+  }
+
+  const Component = isMobile ? ChatTabMobile : ChatTabDesktop;
+  
+  return (
+    <Component
+      user={user}
+      voiceEnabled={voiceEnabled}
+      toggleVoice={toggleVoice}
+      className={className}
+    />
+  );
+};
+
+export default ChatTab;

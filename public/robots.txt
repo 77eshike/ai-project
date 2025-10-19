@@ -1,0 +1,16 @@
+# public/robots.txt
+User-agent: *
+Allow: /
+
+# OpenAI SearchBot 特定规则
+User-agent: OAI-SearchBot
+Allow: /
+Crawl-delay: 1
+
+# 禁止爬取的目录
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+
+# 站点地图
+Sitemap: https://191413.ai/sitemap.xml

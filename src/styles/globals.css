@@ -1,0 +1,556 @@
+/* styles/globals.css - 修复版本 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 基础重置和全局样式 */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 消息选择样式 */
+.message {
+    display: flex;
+    padding: 12px;
+    margin: 8px 0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.message:hover {
+    background-color: #f5f5f5;
+}
+
+.message.selected {
+    background-color: #e3f2fd;
+    border-left: 4px solid #2196f3;
+}
+
+.message-checkbox {
+    margin-right: 12px;
+    display: flex;
+    align-items: flex-start;
+    padding-top: 4px;
+}
+
+.message-content {
+    flex: 1;
+}
+
+/* 语音输入相关样式 */
+.voice-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.voice-input-wrapper {
+  position: relative;
+  flex: 1;
+}
+
+.voice-input-button {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0.5rem;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2em;
+  z-index: 10;
+}
+
+.voice-input-button:not(.listening):hover {
+  background-color: #f3f4f6;
+}
+
+.voice-input-button.listening {
+  background-color: #fecaca;
+  color: #dc2626;
+  animation: global-pulse 1.5s ease-in-out infinite;
+}
+
+.voice-input-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.voice-status-indicator {
+  margin-top: 0.5rem;
+  text-align: center;
+}
+
+.voice-status-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.voice-status-listening {
+  background-color: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.voice-status-error {
+  background-color: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fed7aa;
+}
+
+.voice-dots {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.voice-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: currentColor;
+  animation: voice-dots 1.4s ease-in-out infinite both;
+}
+
+.voice-dot:nth-child(1) { animation-delay: -0.32s; }
+.voice-dot:nth-child(2) { animation-delay: -0.16s; }
+.voice-dot:nth-child(3) { animation-delay: 0s; }
+
+@keyframes voice-dots {
+  0%, 80%, 100% { 
+    transform: scale(0);
+    opacity: 0;
+  }
+  40% { 
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.voice-compatibility-alert {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background-color: #fffbeb;
+  border: 1px solid #fed7aa;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  color: #d97706;
+}
+
+.voice-browser-support {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+.voice-error-state {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+}
+
+.message-selection-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background-color: #dbeafe;
+  border: 1px solid #93c5fd;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.message-selection-info {
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.message-selection-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.knowledge-save-modal {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 1rem;
+}
+
+.knowledge-save-content {
+  background-color: white;
+  border-radius: 0.5rem;
+  width: 100%;
+  max-width: 28rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.knowledge-save-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.knowledge-save-body {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.knowledge-save-preview {
+  background-color: #f9fafb;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  max-height: 8rem;
+  overflow-y: auto;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.knowledge-save-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  background-color: #f9fafb;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.message-input-container {
+  border-top: 1px solid #e5e7eb;
+  padding: 1rem;
+  background-color: white;
+}
+
+.message-input-wrapper {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* 确保页面过渡动画不会干扰客户端导航 */
+.page-transitioning * {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Font Awesome 图标加载优化 */
+body.fonts-loaded .fa-icon,
+body.fonts-loaded .fas,
+body.fonts-loaded .fab,
+body.fonts-loaded .far {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 0.3s ease-in;
+}
+
+body:not(.fonts-loaded) .fa-icon,
+body:not(.fonts-loaded) .fas,
+body:not(.fonts-loaded) .fab,
+body:not(.fonts-loaded) .far {
+  visibility: hidden;
+  opacity: 0;
+}
+
+/* 图标定义 */
+.fa-icon {
+  display: inline-block;
+  font-style: normal;
+  font-variant: normal;
+  text-rendering: auto;
+  line-height: 1;
+  font-family: 'Font Awesome 6 Free';
+  font-weight: 900;
+}
+
+.fab {
+  font-family: 'Font Awesome 6 Brands' !important;
+  font-weight: 400;
+}
+
+.far {
+  font-weight: 400;
+}
+
+/* 组件样式 */
+@layer components {
+  .btn-primary {
+    @apply bg-gradient-to-r from-blue-600 to-blue-800 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 hover:from-blue-700 hover:to-blue-900 hover:shadow-lg transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none;
+  }
+  
+  .btn-secondary {
+    @apply bg-gradient-to-r from-gray-600 to-gray-800 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 hover:from-gray-700 hover:to-gray-900 hover:shadow-lg transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none;
+  }
+  
+  .btn-danger {
+    @apply bg-gradient-to-r from-red-600 to-red-800 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 hover:from-red-700 hover:to-red-900 hover:shadow-lg transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none;
+  }
+  
+  .input-field {
+    @apply w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed placeholder-gray-400;
+  }
+  
+  .card {
+    @apply bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-200;
+  }
+}
+
+/* 语音切换开关样式 */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 30px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 34px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 22px;
+  width: 22px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .toggle-slider {
+  background-color: #3b82f6;
+}
+
+input:checked + .toggle-slider:before {
+  transform: translateX(30px);
+}
+
+/* 重命名动画避免冲突 */
+@keyframes global-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes message-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0%, 100% { 
+    transform: translateY(0) rotate(0deg); 
+    opacity: 0.3; 
+  }
+  50% { 
+    transform: translateY(-30px) rotate(180deg); 
+    opacity: 0.6; 
+  }
+}
+
+@keyframes progress {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .message-selection-toolbar {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: stretch;
+  }
+  
+  .message-selection-actions {
+    justify-content: center;
+  }
+  
+  .knowledge-save-content {
+    margin: 0 0.5rem;
+  }
+  
+  .message-input-wrapper {
+    flex-direction: column;
+  }
+  
+  .voice-input-button {
+    right: 0.25rem;
+    padding: 0.25rem;
+    font-size: 1.1em;
+  }
+}
+
+/* 暗色模式支持 */
+@media (prefers-color-scheme: dark) {
+  .voice-status-listening {
+    background-color: rgba(127, 29, 29, 0.2);
+    color: #fca5a5;
+    border-color: #7f1d1d;
+  }
+  
+  .knowledge-save-content {
+    background-color: #1f2937;
+    color: white;
+  }
+  
+  .knowledge-save-preview {
+    background-color: #374151;
+    color: #d1d5db;
+  }
+  
+  .message-selection-toolbar {
+    background-color: rgba(59, 130, 246, 0.2);
+    border-color: #1e40af;
+  }
+  
+  .message-selection-info {
+    color: #93c5fd;
+  }
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .voice-input-button.listening,
+  .voice-dot {
+    animation: none !important;
+  }
+  
+  .voice-input-button.listening {
+    background-color: #fecaca;
+  }
+}
+
+/* 高对比度模式 */
+@media (prefers-contrast: high) {
+  .voice-input-button.listening {
+    background-color: #ff0000;
+    color: #ffffff;
+    border: 2px solid #ffffff;
+  }
+}
+/* ===== 知识库标题显示修复 - 安全添加 ===== */
+/* 这些样式专门用于修复知识库组件的标题显示问题 */
+
+/* 多行文本截断 */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 文本换行修复 */
+.break-words-safe {
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* 弹性布局修复 */
+.flex-min-w-0 {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 知识库特定样式 - 使用特定前缀避免冲突 */
+.kb-title-fix {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  line-height: 1.4;
+  min-height: 2.8rem;
+}
+
+.kb-description-fix {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  min-height: 4.5rem;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .kb-title-fix {
+    min-height: 2.4rem;
+    -webkit-line-clamp: 2;
+  }
+  
+  .kb-description-fix {
+    min-height: 3.8rem;
+    -webkit-line-clamp: 2;
+  }
+}

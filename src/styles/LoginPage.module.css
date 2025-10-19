@@ -1,0 +1,443 @@
+.container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 加载状态样式 */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #6e8efb;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 欢迎容器样式 */
+.welcomeContainer {
+  padding: 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.userInfo {
+  background: white;
+  border-radius: 10px;
+  padding: 2rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-top: 2rem;
+}
+
+.actionLinks {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.linkButton {
+  background: linear-gradient(135deg, #6e8efb, #a777e3);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 5px;
+  text-decoration: none;
+  transition: transform 0.2s;
+  display: inline-block;
+}
+
+.linkButton:hover {
+  transform: translateY(-2px);
+}
+
+/* 登录容器样式 */
+.loginContainer {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+}
+
+.leftPanel {
+  flex: 1;
+  background: linear-gradient(135deg, #4a6cf7, #7b53c1);
+  color: white;
+  padding: 50px 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.logo {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.logo i {
+  margin-right: 10px;
+  font-size: 32px;
+}
+
+.welcomeText {
+  margin-bottom: 30px;
+}
+
+.welcomeText h1 {
+  font-size: 32px;
+  margin-bottom: 10px;
+}
+
+.welcomeText p {
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.6;
+}
+
+.features {
+  list-style: none;
+  margin: 30px 0 40px 0;
+  padding: 0;
+}
+
+.features li {
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+}
+
+.features i {
+  margin-right: 10px;
+  color: #a6ffcb;
+  font-size: 18px;
+  width: 20px;
+}
+
+.divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.3);
+  margin: 25px 0;
+}
+
+.rightPanel {
+  flex: 1;
+  padding: 50px 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: white;
+}
+
+.loginHeader {
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.loginHeader h2 {
+  font-size: 28px;
+  color: #333;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+/* 错误消息样式 */
+.errorMessage {
+  background-color: #fee;
+  border: 1px solid #fcc;
+  color: #c33;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.errorMessage i {
+  font-size: 16px;
+}
+
+.loginForm {
+  width: 100%;
+}
+
+.formGroup {
+  margin-bottom: 20px;
+}
+
+.formGroup label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #444;
+  font-size: 14px;
+}
+
+.inputWithIcon {
+  position: relative;
+}
+
+.inputWithIcon i {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #777;
+  z-index: 1;
+}
+
+.inputWithIcon input {
+  width: 100%;
+  padding: 15px 15px 15px 45px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  font-size: 16px;
+  transition: all 0.3s;
+  background-color: #fafafa;
+  /* 确保输入框文字颜色为黑色 */
+  color: #000;
+}
+
+.inputWithIcon input:focus {
+  border-color: #6e8efb;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(110, 142, 251, 0.2);
+  background-color: #fff;
+}
+
+.options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.remember {
+  display: flex;
+  align-items: center;
+}
+
+.remember input {
+  margin-right: 8px;
+  accent-color: #6e8efb;
+  /* 修复记住我复选框背景色 */
+  background-color: #fafafa;
+  border-radius: 3px;
+  width: 16px;
+  height: 16px;
+}
+
+.remember label {
+  margin: 0;
+  font-weight: normal;
+  color: #666;
+}
+
+.forgotPassword {
+  color: #6e8efb;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.forgotPassword:hover {
+  text-decoration: underline;
+}
+
+.loginButton {
+  width: 100%;
+  padding: 15px;
+  background: linear-gradient(135deg, #6e8efb, #a777e3);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.loginButton:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(110, 142, 251, 0.4);
+}
+
+.loginButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.dividerText {
+  display: flex;
+  align-items: center;
+  margin: 20px 0;
+  gap: 12px;
+}
+
+.dividerText span {
+  flex: 1;
+  height: 1px;
+  background: #ddd;
+}
+
+.dividerText p {
+  color: #777;
+  margin: 0;
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.socialLogin {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-bottom: 25px;
+  flex-wrap: wrap;
+}
+
+.socialButton {
+  padding: 12px 20px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.socialButton:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.google {
+  background: #DB4437;
+}
+
+.facebook {
+  background: #4267B2;
+}
+
+.twitter {
+  background: #1DA1F2;
+}
+
+.register {
+  text-align: center;
+  color: #555;
+  margin-top: auto;
+}
+
+.register a {
+  color: #6e8efb;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.register a:hover {
+  text-decoration: underline;
+}
+
+/* 响应式设计 */
+@media (max-width: 968px) {
+  .loginContainer {
+    flex-direction: column;
+    min-height: auto;
+  }
+  
+  .leftPanel, .rightPanel {
+    padding: 40px 30px;
+  }
+  
+  .leftPanel {
+    order: 2;
+  }
+  
+  .rightPanel {
+    order: 1;
+  }
+  
+  .actionLinks {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .linkButton {
+    width: 100%;
+    max-width: 200px;
+    text-align: center;
+  }
+  
+  .socialLogin {
+    flex-direction: column;
+  }
+  
+  .socialButton {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .leftPanel, .rightPanel {
+    padding: 30px 20px;
+  }
+  
+  .logo {
+    font-size: 24px;
+  }
+  
+  .welcomeText h1 {
+    font-size: 28px;
+  }
+  
+  .loginHeader h2 {
+    font-size: 24px;
+  }
+  
+  .options {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+  
+  .forgotPassword {
+    margin-left: auto;
+  }
+}

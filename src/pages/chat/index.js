@@ -1,97 +1,62 @@
-import { useState } from 'react'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@lib/auth'
+// src/pages/chat/index.js
+import { useEffect, useState, useRef } from 'react';
+import { useRouter } from 'next/router';
+import { getSession } from 'next-auth/react';
+import { useUser } from '../../contexts/UserContext';
+import Head from 'next/head';
+import ErrorBoundary from '../../components/ErrorBoundary';
+import ChatTab from '../../components/chat'; // 正确导入聊天主入口
 
-export default function Chat({ user }) {
-  const [message, setMessage] = useState('')
-  const [conversation, setConversation] = useState([])
-  const [loading, setLoading] = useState(false)
+export default function ChatPage({ session }) {
+  const router = useRouter();
+  const { user, loading, voiceEnabled, toggleVoice } = useUser();
+  const [isClient, setIsClient] = useState(false);
+  const isRedirectingRef = useRef(false);
 
-  const sendMessage = async () => {
-    if (!message.trim() || loading) return
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
-    setLoading(true)
-    const userMessage = { role: 'user', content: message }
-    setConversation(prev => [...prev, userMessage])
-    setMessage('')
-
-    try {
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ message })
-      })
-
-      const data = await response.json()
-      if (response.ok) {
-        setConversation(prev => [...prev, { role: 'assistant', content: data.response }])
-      } else {
-        throw new Error(data.error)
-      }
-    } catch (error) {
-      console.error('Error:', error)
-      setConversation(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Sorry, I encountered an error. Please try again.' 
-      }])
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    if (isClient && !user && !loading && !isRedirectingRef.current) {
+      isRedirectingRef.current = true;
+      router.push('/auth/signin');
     }
+  }, [user, loading, router, isClient]);
+
+  if (!isClient || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">加载中...</p>
+        </div>
+      </div>
+    );
   }
 
+  if (!user) return null;
+
   return (
-    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-      <h1>AI Chat</h1>
-      <div style={{ border: '1px solid #ccc', height: '400px', overflowY: 'auto', padding: '1rem' }}>
-        {conversation.map((msg, index) => (
-          <div key={index} style={{ 
-            marginBottom: '1rem', 
-            textAlign: msg.role === 'user' ? 'right' : 'left' 
-          }}>
-            <strong>{msg.role === 'user' ? 'You' : 'AI'}:</strong>
-            <p>{msg.content}</p>
-          </div>
-        ))}
-        {loading && <div>Thinking...</div>}
-      </div>
-      <div style={{ marginTop: '1rem' }}>
-        <input
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-          placeholder="Type your message..."
-          style={{ width: '70%', padding: '0.5rem' }}
-        />
-        <button 
-          onClick={sendMessage} 
-          disabled={loading}
-          style={{ padding: '0.5rem 1rem', marginLeft: '0.5rem' }}
-        >
-          Send
-        </button>
-      </div>
-    </div>
-  )
+    <ErrorBoundary>
+      <Head>
+        <title>深度对话 - AI平台</title>
+        <meta name="description" content="与AI助手进行深入讨论" />
+      </Head>
+      
+      <ChatTab 
+        user={user}
+        voiceEnabled={voiceEnabled}
+        toggleVoice={toggleVoice}
+      />
+    </ErrorBoundary>
+  );
 }
 
 export async function getServerSideProps(context) {
-  const session = await getServerSession(context.req, context.res, authOptions)
-
+  const session = await getSession(context);
   if (!session) {
-    return {
-      redirect: {
-        destination: '/auth/signin',
-        permanent: false
-      }
-    }
+    return { redirect: { destination: '/auth/signin', permanent: false } };
   }
-
-  return {
-    props: {
-      user: session.user
-    }
-  }
+  return { props: { session } };
 }

@@ -1,4 +1,5 @@
 .
+├── .env
 ├── .env.development
 ├── .env.production
 ├── .git
@@ -33,25 +34,104 @@
 │   │           └── origin
 │   │               └── main
 │   ├── objects
+│   │   ├── 0a
+│   │   │   ├── 3dcf97981cedaad3e5f680ba0ef3b6b7745ec4
+│   │   │   └── 554e388b0e3148af25444236cb1007a704c592
+│   │   ├── 0b
+│   │   │   └── 7b362e2cc39981622e6f8640c29d5e2c6f22fe
+│   │   ├── 0d
+│   │   │   └── 727ccc3ba380a7d71154d2de3cf8f7b5522f40
+│   │   ├── 0f
+│   │   │   └── 931be8c703d32c1449b677c017595a04c656b4
 │   │   ├── 19
 │   │   │   ├── 59017f9759817077d997951895de28c9e8befe
 │   │   │   └── c85c8106e32a6a5d0374cbc75b4fb8e4a24335
 │   │   ├── 22
 │   │   │   └── b3401a7d53b9274dcd93c8e7aba9499454a4e4
+│   │   ├── 25
+│   │   │   └── 2eda8dffc9ac963ff66a0e180b41968e4be4c5
+│   │   ├── 27
+│   │   │   ├── 16a7d3245b18ee61c3066fd4e87f758bcab111
+│   │   │   └── 268f0075801b14695f6aa2fc8094cadfe46c7c
 │   │   ├── 2d
 │   │   │   └── 48d7b93865d1012aeb92916b11d8df607f7819
+│   │   ├── 2e
+│   │   │   ├── d156728c12667590501fee79aa9a209ff89f9c
+│   │   │   └── d74f2390e736c66e7e7f8ab1bdb5439396f939
+│   │   ├── 42
+│   │   │   └── e5cd9c213581ca7fc0eaf72a4fa48fe9fe792e
+│   │   ├── 52
+│   │   │   └── 842a81422fd6616807a32a357501fd51979c18
 │   │   ├── 56
+│   │   │   ├── 74ef8835aceb0f6ad0590eac1bd6d3e44378f4
 │   │   │   └── 7d7d5a288936b41b2db9f017ea1dc5da8d9f48
 │   │   ├── 65
-│   │   │   └── cf594d1cdf20c922b8da9e67eff693c62ea952
+│   │   │   ├── cf594d1cdf20c922b8da9e67eff693c62ea952
+│   │   │   └── feb5402368cd845ac398e8c72fdd140aa2ca83
+│   │   ├── 6c
+│   │   │   └── 70b914f0b03ad8714808f27fddf19a9dae1cbe
 │   │   ├── 6d
 │   │   │   └── 624f78de49a363e03cd2f9ff17f3254afd79d6
+│   │   ├── 71
+│   │   │   └── e5c819c193189f68b58cdcf22ee9e64a99b806
+│   │   ├── 72
+│   │   │   └── f3fd02ba97ed902822045d018a235140e10cf8
+│   │   ├── 79
+│   │   │   └── 6d54a017e142140a58ce5fc670b003b90c6148
+│   │   ├── 83
+│   │   │   └── 32257b1b8dbaa99a7d3b5933d2a12879a4d69a
+│   │   ├── 89
+│   │   │   └── 7887e7c119d78fa82e005129cf84350d522bd9
+│   │   ├── 8b
+│   │   │   ├── 52f17957baeb65ee8b515a69908adba6b7b0ee
+│   │   │   └── 75b962fffdb63bc8ed709bf2595e7eca2da832
+│   │   ├── 92
+│   │   │   └── 558063f80701af986da5dd6fe052a2122173fb
 │   │   ├── 94
 │   │   │   └── 002f75b2821c4573c7be9e027cf8eb2388475c
+│   │   ├── a9
+│   │   │   └── aa2a5f99ab391c7d8d45e010c509636ce14aa5
+│   │   ├── ac
+│   │   │   └── 0fc5d20734e46e539247fc0967e040cfd077ea
+│   │   ├── ae
+│   │   │   └── b49eafa162a55b18ebbbbe7bfd2a9fc2732329
+│   │   ├── b2
+│   │   │   ├── 74d665dd6f0b51a66bb813a87224fff2374685
+│   │   │   └── d17e1c58d72a8080d7ceae64b6df991381c76d
+│   │   ├── b3
+│   │   │   └── 0944902bbb0d713b1e5a03cc4ffcecf3cce99c
+│   │   ├── b4
+│   │   │   └── cc29faeb9c5816b7eb7c28a91896d590de205d
+│   │   ├── b7
+│   │   │   ├── 913b889135fdacbf9981d71c9a945fb2f9cc54
+│   │   │   └── 9f8ee3a7f933994cbca12472f0d29a82b2a41f
+│   │   ├── b8
+│   │   │   └── 788c10f2858f46b1b1eb6ede7b5b0bf4cdc624
+│   │   ├── ba
+│   │   │   └── 50b81f89b327cd5053f2102901d91be8864424
+│   │   ├── bd
+│   │   │   └── afad0bf7aa4983f6e80bcbce83357fb89c0ef3
+│   │   ├── bf
+│   │   │   └── 06ec1ec899fa5cf5a4db6bcffa854ed9fcfbb3
+│   │   ├── cf
+│   │   │   └── f137c9bdc2421e37263cfb63a280264803dfc4
 │   │   ├── d5
+│   │   │   ├── 3817a059f7b63176d11ffdbaf4a04eef7301dd
+│   │   │   ├── 45d9e162a67d5932359ed947c6edcdd21b969b
 │   │   │   └── 5389845620bd676b6cab36f6c7463e5c6db8a2
 │   │   ├── d9
-│   │   │   └── 0c767bb0a5224b8fa70c9052be213f932830ab
+│   │   │   ├── 0c767bb0a5224b8fa70c9052be213f932830ab
+│   │   │   └── 5bd38abbab3d61e7c700fb5ff3ec76948ef343
+│   │   ├── e6
+│   │   │   └── 21ec364bca6eb7858ad75d51198785b9d98365
+│   │   ├── ea
+│   │   │   └── 3014ffe520c414a0b0ddfe6fc29620622e9d5e
+│   │   ├── f2
+│   │   │   └── 383276afca43b1bcb7b170154295d051fb4886
+│   │   ├── f7
+│   │   │   └── b4090d462d9def9bf1696ea819193a96d7aab5
+│   │   ├── f8
+│   │   │   └── cec3b9275885f9453ca743dd6dda8d42ba6930
 │   │   ├── info
 │   │   └── pack
 │   └── refs
@@ -85,12 +165,135 @@
 │   │           ├── 0.pack
 │   │           ├── 1.pack
 │   │           ├── 2.pack
-│   │           ├── 3.pack
-│   │           ├── 4.pack
-│   │           ├── 5.pack
-│   │           ├── 6.pack
 │   │           ├── index.pack
 │   │           └── index.pack.old
+│   ├── diagnostics
+│   │   ├── build-diagnostics.json
+│   │   └── framework.json
+│   ├── dynamic-css-manifest.json
+│   ├── export-marker.json
+│   ├── images-manifest.json
+│   ├── next-minimal-server.js.nft.json
+│   ├── next-server.js.nft.json
+│   ├── package.json
+│   ├── prerender-manifest.json
+│   ├── react-loadable-manifest.json
+│   ├── required-server-files.json
+│   ├── routes-manifest.json
+│   ├── server
+│   │   ├── chunks
+│   │   │   ├── 169.js
+│   │   │   ├── 190.js
+│   │   │   ├── 238.js
+│   │   │   ├── 341.js
+│   │   │   ├── 781.js
+│   │   │   └── 918.js
+│   │   ├── dynamic-css-manifest.js
+│   │   ├── functions-config-manifest.json
+│   │   ├── interception-route-rewrite-manifest.js
+│   │   ├── middleware-build-manifest.js
+│   │   ├── middleware-manifest.json
+│   │   ├── middleware-react-loadable-manifest.js
+│   │   ├── next-font-manifest.js
+│   │   ├── next-font-manifest.json
+│   │   ├── pages
+│   │   │   ├── 404.html
+│   │   │   ├── 500.html
+│   │   │   ├── _app.js
+│   │   │   ├── _app.js.nft.json
+│   │   │   ├── _document.js
+│   │   │   ├── _document.js.nft.json
+│   │   │   ├── _error.js
+│   │   │   ├── _error.js.nft.json
+│   │   │   ├── api
+│   │   │   │   ├── ai
+│   │   │   │   │   ├── chat.js
+│   │   │   │   │   └── chat.js.nft.json
+│   │   │   │   ├── auth
+│   │   │   │   │   ├── [...nextauth].js
+│   │   │   │   │   ├── [...nextauth].js.nft.json
+│   │   │   │   │   ├── diagnose.js
+│   │   │   │   │   ├── diagnose.js.nft.json
+│   │   │   │   │   ├── login.js
+│   │   │   │   │   ├── login.js.nft.json
+│   │   │   │   │   ├── register.js
+│   │   │   │   │   ├── register.js.nft.json
+│   │   │   │   │   ├── test.js
+│   │   │   │   │   └── test.js.nft.json
+│   │   │   │   ├── hello.js
+│   │   │   │   ├── hello.js.nft.json
+│   │   │   │   ├── upload
+│   │   │   │   │   ├── [...nextauth].js
+│   │   │   │   │   └── [...nextauth].js.nft.json
+│   │   │   │   ├── users.js
+│   │   │   │   └── users.js.nft.json
+│   │   │   ├── auth
+│   │   │   │   ├── error.html
+│   │   │   │   ├── error.js.nft.json
+│   │   │   │   ├── signin.html
+│   │   │   │   ├── signin.js.nft.json
+│   │   │   │   ├── signup.html
+│   │   │   │   └── signup.js.nft.json
+│   │   │   ├── chat.js
+│   │   │   ├── chat.js.nft.json
+│   │   │   ├── dashboard.html
+│   │   │   ├── dashboard.js.nft.json
+│   │   │   ├── index.js
+│   │   │   ├── index.js.nft.json
+│   │   │   ├── upload.js
+│   │   │   └── upload.js.nft.json
+│   │   ├── pages-manifest.json
+│   │   ├── webpack-api-runtime.js
+│   │   └── webpack-runtime.js
+│   ├── static
+│   │   ├── chunks
+│   │   │   ├── 230-6f6dbb566cd5139b.js
+│   │   │   ├── 351.7cb9717a3cbf6927.js
+│   │   │   ├── framework-b1e5f14688f9ffe6.js
+│   │   │   ├── main-36931aa16272d372.js
+│   │   │   ├── pages
+│   │   │   │   ├── _app-24decbe343f78e10.js
+│   │   │   │   ├── _error-5366f00fee9a89ba.js
+│   │   │   │   ├── auth
+│   │   │   │   │   ├── error-ef2b0b1a89b7b62a.js
+│   │   │   │   │   ├── signin-ca6c6ee12407b4ba.js
+│   │   │   │   │   └── signup-82376361820ab10e.js
+│   │   │   │   ├── chat-f0cc668163cf4bbb.js
+│   │   │   │   ├── dashboard-a685ff11ae8f651c.js
+│   │   │   │   ├── index-76cc5886b363343a.js
+│   │   │   │   └── upload-72b867f2ebf59416.js
+│   │   │   ├── polyfills-42372ed130431b0a.js
+│   │   │   └── webpack-6bc00cb233dccf8a.js
+│   │   ├── css
+│   │   │   ├── 4797780b7a461be5.css
+│   │   │   └── f265c51a5182362a.css
+│   │   └── d53817a
+│   │       ├── _buildManifest.js
+│   │       └── _ssgManifest.js
+│   ├── trace
+│   └── types
+│       ├── routes.d.ts
+│       └── validator.ts
+├── README.md
+├── build
+│   ├── BUILD_ID
+│   ├── build-manifest.json
+│   ├── cache
+│   │   ├── .previewinfo
+│   │   ├── .rscinfo
+│   │   ├── swc
+│   │   │   └── plugins
+│   │   │       └── linux_x86_64_18.0.0
+│   │   └── webpack
+│   │       ├── client-production
+│   │       │   ├── 0.pack
+│   │       │   └── index.pack
+│   │       ├── edge-server-production
+│   │       │   ├── 0.pack
+│   │       │   └── index.pack
+│   │       └── server-production
+│   │           ├── 0.pack
+│   │           └── index.pack
 │   ├── diagnostics
 │   │   ├── build-diagnostics.json
 │   │   └── framework.json
@@ -173,54 +376,98 @@
 │   │   │   │   └── upload-72b867f2ebf59416.js
 │   │   │   ├── polyfills-42372ed130431b0a.js
 │   │   │   └── webpack-8cac0b4b405cede1.js
-│   │   └── mAb4EQHyqptweXx5YOPjx
+│   │   └── qJodIfmYiO0glvRWxXj72
 │   │       ├── _buildManifest.js
 │   │       └── _ssgManifest.js
 │   ├── trace
 │   └── types
 │       ├── routes.d.ts
 │       └── validator.ts
-├── README.md
+├── components
+│   └── Utils
+│       └── FontLoader.js
 ├── config
+├── create-admin-user.js
 ├── ecosystem.config.js
+├── fix-port.sh
+├── hooks
+│   └── useAuth.js
 ├── jsconfig.json
 ├── logs
 ├── next.config.js
 ├── package-lock.json
 ├── package.json
+├── postcss.config.js
 ├── prisma
-│   ├── dev.db
-│   └── schema.prisma
+│   ├── migrations
+│   │   ├── 20250913170620_init
+│   │   │   └── migration.sql
+│   │   └── migration_lock.toml
+│   ├── schema.prisma
+│   └── seed.js
 ├── project-structure.txt
+├── public
+│   └── favicon.ico
 ├── src
 │   ├── components
+│   │   ├── AuthGuard.js
+│   │   ├── Layout
+│   │   │   └── AuthLayout.jsx
+│   │   ├── LoginPage.js
+│   │   ├── ProtectedRoute.js
+│   │   ├── SessionProvider.js
+│   │   └── Utils
+│   │       └── FontLoader.js
+│   ├── contexts
+│   │   └── UserContext.js
 │   ├── lib
-│   │   └── auth.js
+│   │   ├── auth.js
+│   │   ├── prisma.js
+│   │   └── session.js
 │   ├── pages
+│   │   ├── _app.js
+│   │   ├── _document.js
 │   │   ├── api
 │   │   │   ├── ai
 │   │   │   │   └── chat.js
 │   │   │   ├── auth
 │   │   │   │   ├── [...nextauth].js
-│   │   │   │   └── signup.js
+│   │   │   │   ├── diagnose.js
+│   │   │   │   ├── login.js
+│   │   │   │   ├── register.js
+│   │   │   │   └── test.js
 │   │   │   ├── hello.js
 │   │   │   ├── upload
 │   │   │   │   └── [...nextauth].js
 │   │   │   └── users.js
 │   │   ├── auth
+│   │   │   ├── error.js
 │   │   │   ├── signin.js
 │   │   │   └── signup.js
 │   │   ├── chat
 │   │   │   └── index.js
+│   │   ├── dashboard.js
 │   │   ├── index.js
 │   │   ├── index.js.bak
 │   │   └── upload
 │   │       └── index.js
 │   └── styles
+│       ├── LoginPage.module.css
+│       ├── globals.css
+│       └── login.module.css
+├── tailwind.config.js
+├── test
+│   ├── login.test.js
+│   └── test-db-connection.js
+├── test-auth.js
+├── test-db-connection.js
 ├── test-db-operation.js
 ├── test-deps.js
 ├── test-import-absolute.js
 ├── test-import.js
+├── types
+│   ├── next-auth.d.ts
+│   └── user.ts
 ├── uploads
 └── 。
     └── log
@@ -229,4 +476,4 @@
             ├── ai-project-error-0.log
             └── ai-project-out-0.log
 
-69 directories, 160 files
+139 directories, 337 files
