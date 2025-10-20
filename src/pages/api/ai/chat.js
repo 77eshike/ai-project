@@ -1,7 +1,8 @@
-// pages/api/ai/chat.js - 语音识别优化版本
+// pages/api/ai/chat.js - 语音识别优化版本 + 指令识别集成
 import { getCurrentUser } from '../../../lib/session';
-import { PrismaClient } from '@prisma/client';
+import Prisma from '../../../lib/prisma';
 import { AI_MODES } from '../../../lib/ai-modes';
+import { CommandProcessor } from '../../../lib/command-processor';
 
 const globalForPrisma = globalThis;
 const prisma = globalForPrisma.prisma || new PrismaClient();
@@ -135,6 +136,92 @@ export default async function handler(req, res) {
     const userMessage = { role: 'user', content: message.trim() };
     messages.push(userMessage);
 
+    // === 新增：指令识别和处理 ===
+    const commandProcessor = new CommandProcessor();
+    const commandContext = {
+      userId: userId,
+      conversationId: conversationId,
+      conversationHistory: messages,
+      mode: mode
+    };
+
+    const commandResult = await commandProcessor.processMessage(message, commandContext);
+    
+    if (commandResult) {
+      console.log('🎯 指令识别成功:', commandResult.command);
+      
+      // 创建指令响应消息
+      const assistantMessage = { 
+        role: 'assistant', 
+        content: commandResult.message,
+        isCommand: true,
+        commandData: commandResult
+      };
+
+      // 保存到数据库
+      let updatedConversation;
+      try {
+        if (existingConversation) {
+          updatedConversation = await prisma.conversation.update({
+            where: { 
+              id: conversationId,
+              userId: userId
+            },
+            data: {
+              messages: {
+                push: [userMessage, assistantMessage]
+              },
+              updatedAt: new Date(),
+              metadata: {
+                ...(existingConversation.metadata || {}),
+                lastMode: mode,
+                voiceEnabled: voiceEnabled,
+                messageCount: (existingConversation.messages.length + 2)
+              }
+            }
+          });
+        } else {
+          console.log('💾 创建新对话');
+          const title = message.length > 50 
+            ? message.substring(0, 47) + '...' 
+            : message;
+
+          updatedConversation = await prisma.conversation.create({
+            data: {
+              userId: userId,
+              title: title,
+              messages: [userMessage, assistantMessage],
+              metadata: {
+                initialMode: mode,
+                voiceEnabled: voiceEnabled,
+                messageCount: 2
+              }
+            }
+          });
+        }
+      } catch (dbError) {
+        console.error('❌ 数据库保存错误（指令）:', dbError);
+        // 数据库错误不影响返回指令响应
+        console.log('⚠️ 数据库保存失败，但继续返回指令响应');
+      }
+
+      console.log('✅ 指令响应成功');
+      
+      // 返回指令响应
+      return res.status(200).json({
+        success: true,
+        response: commandResult.message,
+        reply: commandResult.message,
+        conversationId: updatedConversation?.id || conversationId,
+        mode: mode,
+        modeName: AI_MODES[mode].name,
+        timestamp: new Date().toISOString(),
+        isCommand: true,
+        commandResult: commandResult
+      });
+    }
+
+    // === 如果没有指令，继续正常AI对话 ===
     console.log('🤖 调用AI服务，消息长度:', message.length, '模式:', mode);
     const aiResponse = await callDeepSeekAI(messages, mode);
 

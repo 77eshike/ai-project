@@ -1,4 +1,3 @@
-// prisma/schema.sqlite.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -22,11 +21,18 @@ model User {
   updatedAt     DateTime     @updatedAt
 
   // 关系
-  accounts      Account[]
-  sessions      Session[]
-  files         File[]
-  knowledges    Knowledge[]
-  conversations Conversation[]
+  accounts            Account[]
+  sessions            Session[]
+  files               File[]
+  knowledges          Knowledge[]
+  conversations       Conversation[]
+  
+  // 新增的项目相关关系
+  ownedProjects       Project[]                 @relation("ProjectOwner")
+  projectMembers      ProjectMember[]           @relation("ProjectMembers")
+  projectComments     ProjectComment[]          @relation("ProjectComments")
+  createdRecruitments Recruitment[]             @relation("RecruitmentCreator")
+  recruitmentApplications RecruitmentApplication[] @relation("RecruitmentApplications")
 
   @@map("users")
 }
@@ -105,10 +111,98 @@ model Conversation {
   userId    Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  metadata  Json?    // 存储模式等信息
+  metadata  Json?
   
-  // 关系 - 必须在字段定义之后
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@map("conversations")
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  content     String?
+  type        String   @default("DRAFT_PROJECT")
+  status      String   @default("DRAFT")
+  visibility  String   @default("PRIVATE")
+  ownerId     Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  publishedAt DateTime?
+
+  // 关系
+  owner       User     @relation(fields: [ownerId], references: [id], name: "ProjectOwner")
+  members     ProjectMember[]
+  comments    ProjectComment[]
+  recruitments Recruitment[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    Int
+  role      String   @default("MEMBER")
+  joinedAt  DateTime @default(now())
+
+  // 关系
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [userId], references: [id], name: "ProjectMembers")
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+model ProjectComment {
+  id        String   @id @default(cuid())
+  content   String
+  projectId String
+  userId    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 关系
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [userId], references: [id], name: "ProjectComments")
+
+  @@map("project_comments")
+}
+
+model Recruitment {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  requirements String?
+  projectId   String
+  createdById Int
+  status      String   @default("OPEN")
+  maxMembers  Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 关系
+  project     Project @relation(fields: [projectId], references: [id])
+  createdBy   User    @relation(fields: [createdById], references: [id], name: "RecruitmentCreator")
+  applications RecruitmentApplication[]
+
+  @@map("recruitments")
+}
+
+model RecruitmentApplication {
+  id            String   @id @default(cuid())
+  recruitmentId String
+  applicantId   Int
+  message       String?
+  status        String   @default("PENDING")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // 关系
+  recruitment Recruitment @relation(fields: [recruitmentId], references: [id])
+  applicant   User        @relation(fields: [applicantId], references: [id], name: "RecruitmentApplications")
+
+  @@unique([recruitmentId, applicantId])
+  @@map("recruitment_applications")
 }

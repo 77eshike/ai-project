@@ -1,4 +1,4 @@
-// src/components/chat/ChatTabBase.js - 修复版本（添加知识点保存）
+// src/components/chat/ChatTabBase.js - 修复版本（添加指令识别和项目功能）
 import { useState, useRef, useCallback, useEffect } from 'react';
 import KnowledgeSaveModal from './KnowledgeSaveModal';
 
@@ -30,59 +30,57 @@ const ChatTabBase = ({
     setTimeout(() => setToast(null), 3000);
   }, []);
 
- // 在 ChatTabBase.js 中修改保存函数，只使用原有的 save.js API：
+  // 保存知识点到后端 - 修复版本
+  const handleSaveKnowledge = useCallback(async (knowledgeData) => {
+    try {
+      console.log('💾 保存知识点:', knowledgeData);
+      
+      const saveData = {
+        content: [
+          {
+            type: 'text',
+            content: knowledgeData.content
+          }
+        ],
+        category: knowledgeData.category,
+        tags: knowledgeData.tags,
+        source: knowledgeData.source || 'chat'
+      };
 
-// 保存知识点到后端 - 修复版本
-const handleSaveKnowledge = useCallback(async (knowledgeData) => {
-  try {
-    console.log('💾 保存知识点:', knowledgeData);
-    
-    const saveData = {
-      content: [
-        {
-          type: 'text',
-          content: knowledgeData.content
-        }
-      ],
-      category: knowledgeData.category,
-      tags: knowledgeData.tags,
-      source: knowledgeData.source || 'chat'
-    };
+      console.log('📤 发送保存请求:', saveData);
 
-    console.log('📤 发送保存请求:', saveData);
+      const response = await fetch('/api/knowledge/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(saveData)
+      });
 
-    const response = await fetch('/api/knowledge/save', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify(saveData)
-    });
+      const data = await response.json();
+      console.log('📨 保存响应:', data);
 
-    const data = await response.json();
-    console.log('📨 保存响应:', data);
+      if (!response.ok) {
+        const errorMessage = data.error || data.message || `保存失败: ${response.status}`;
+        console.error('保存知识点响应错误:', errorMessage);
+        throw new Error(errorMessage);
+      }
 
-    if (!response.ok) {
-      const errorMessage = data.error || data.message || `保存失败: ${response.status}`;
-      console.error('保存知识点响应错误:', errorMessage);
-      throw new Error(errorMessage);
+      if (data.success) {
+        console.log('✅ 知识点保存成功', data);
+        showToast('知识点保存成功', 'success');
+      } else {
+        throw new Error(data.error || '保存失败');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('❌ 保存知识点失败:', error);
+      showToast(`保存失败: ${error.message}`, 'error');
+      throw error;
     }
-
-    if (data.success) {
-      console.log('✅ 知识点保存成功', data);
-      showToast('知识点保存成功', 'success');
-    } else {
-      throw new Error(data.error || '保存失败');
-    }
-    
-    return data;
-  } catch (error) {
-    console.error('❌ 保存知识点失败:', error);
-    showToast(`保存失败: ${error.message}`, 'error');
-    throw error;
-  }
-}, [showToast]);
+  }, [showToast]);
 
   // 处理保存知识点
   const handleSaveMessage = useCallback((message) => {
@@ -121,7 +119,49 @@ const handleSaveKnowledge = useCallback(async (knowledgeData) => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // 发送消息到AI API
+  // 处理指令响应
+  const handleCommandResponse = useCallback((commandResult) => {
+    switch (commandResult.command) {
+      case 'save_to_knowledge':
+        if (commandResult.success) {
+          showToast(`✅ 已保存到知识库 - ${commandResult.data.category}`, 'success');
+        } else {
+          showToast('❌ 保存到知识库失败', 'error');
+        }
+        break;
+        
+      case 'generate_draft_project':
+        if (commandResult.success) {
+          showToast(`🎯 已生成待定项目: ${commandResult.data.title}`, 'success');
+          // 可以在这里提供项目链接或导航
+        } else {
+          showToast('❌ 生成项目失败', 'error');
+        }
+        break;
+        
+      case 'toggle_voice':
+        // 语音开关已经在响应中处理了
+        break;
+        
+      case 'organize_knowledge':
+        if (commandResult.success) {
+          showToast(`📚 已整理知识库，重新分类了 ${commandResult.data.reorganizedCount} 条内容`, 'success');
+        } else {
+          showToast('❌ 整理知识库失败', 'error');
+        }
+        break;
+        
+      default:
+        // 其他指令
+        if (commandResult.success) {
+          showToast(`✅ ${commandResult.message}`, 'success');
+        } else {
+          showToast(`❌ ${commandResult.message}`, 'error');
+        }
+    }
+  }, [showToast]);
+
+  // 发送消息到AI API - 修复版本（支持指令识别）
   const handleSendMessage = useCallback(async (text = null) => {
     const messageContent = String(text || inputText || '').trim();
     if (!messageContent || isLoading) return;
@@ -188,19 +228,36 @@ const handleSaveKnowledge = useCallback(async (knowledgeData) => {
         setCurrentConversationId(data.conversationId);
       }
 
-      // 添加AI回复消息
-      const aiMessage = {
-        id: Date.now() + 1,
-        type: 'ai',
-        content: data.response || data.reply || '抱歉，我暂时无法回复。',
-        time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-        timestamp: Date.now()
-      };
+      // === 新增：处理指令响应 ===
+      let aiMessage;
+      if (data.isCommand) {
+        // 指令响应消息
+        aiMessage = {
+          id: Date.now() + 1,
+          type: 'command',
+          content: data.response || data.reply,
+          time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          timestamp: Date.now(),
+          commandData: data.commandResult
+        };
+        
+        // 处理指令的额外操作
+        handleCommandResponse(data.commandResult);
+      } else {
+        // 普通AI回复消息
+        aiMessage = {
+          id: Date.now() + 1,
+          type: 'ai',
+          content: data.response || data.reply || '抱歉，我暂时无法回复。',
+          time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          timestamp: Date.now()
+        };
+      }
 
       setMessages(prev => [...prev, aiMessage]);
 
-      // 如果启用了语音播报，调用TTS
-      if (voiceEnabled && (data.response || data.reply)) {
+      // 如果启用了语音播报，且不是指令响应，调用TTS
+      if (voiceEnabled && !data.isCommand && (data.response || data.reply)) {
         const textToSpeak = data.response || data.reply;
         console.log('🔊 准备语音播报:', textToSpeak.substring(0, 50) + '...');
         
@@ -213,7 +270,8 @@ const handleSaveKnowledge = useCallback(async (knowledgeData) => {
 
       console.log('✅ AI回复成功', {
         responseLength: (data.response || data.reply).length,
-        conversationId: data.conversationId
+        conversationId: data.conversationId,
+        isCommand: data.isCommand
       });
 
     } catch (error) {
@@ -233,7 +291,7 @@ const handleSaveKnowledge = useCallback(async (knowledgeData) => {
     } finally {
       setIsLoading(false);
     }
-  }, [inputText, isLoading, user, voiceEnabled, currentConversationId, platformProps]);
+  }, [inputText, isLoading, user, voiceEnabled, currentConversationId, platformProps, handleCommandResponse]);
 
   // 文本转语音功能 - 添加符号过滤
   const speakMessage = useCallback((text) => {
@@ -354,6 +412,47 @@ const handleSaveKnowledge = useCallback(async (knowledgeData) => {
     };
   }, [stopSpeech]);
 
+  // 渲染指令消息的特殊内容
+  const renderCommandMessage = useCallback((message) => {
+    const { commandData } = message;
+    
+    if (!commandData) return null;
+
+    return (
+      <div className="bg-green-50 border border-green-200 rounded-lg p-3 mt-2">
+        <div className="flex items-center mb-2">
+          <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center mr-2">
+            <span className="text-white text-xs">✓</span>
+          </div>
+          <span className="text-green-800 font-medium text-sm">指令执行完成</span>
+        </div>
+        
+        {commandData.command === 'generate_draft_project' && commandData.data && (
+          <div className="bg-white rounded border p-2 mb-2">
+            <h4 className="font-medium text-gray-900 text-sm mb-1">项目信息</h4>
+            <p className="text-xs text-gray-600 mb-2">{commandData.data.title}</p>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(commandData.data.projectId);
+                showToast('项目ID已复制到剪贴板', 'success');
+              }}
+              className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors"
+            >
+              复制项目ID
+            </button>
+          </div>
+        )}
+        
+        {commandData.command === 'save_to_knowledge' && commandData.data && (
+          <div className="bg-white rounded border p-2">
+            <h4 className="font-medium text-gray-900 text-sm mb-1">知识库信息</h4>
+            <p className="text-xs text-gray-600">分类: {commandData.data.category}</p>
+          </div>
+        )}
+      </div>
+    );
+  }, [showToast]);
+
   // 渲染消息操作按钮
   const renderMessageActions = useCallback((message) => {
     if (message.type !== 'ai') return null;
@@ -376,10 +475,12 @@ const handleSaveKnowledge = useCallback(async (knowledgeData) => {
 
   const isSendDisabled = !inputText.trim() || isLoading;
 
-  // 快捷提示消息
+  // 快捷提示消息 - 添加指令提示
   const quickSuggestions = [
     { text: '你好，请介绍一下你自己', emoji: '👋' },
     { text: '你能帮我做什么？', emoji: '❓' },
+    { text: '把这个对话转入知识库', emoji: '💾', isCommand: true },
+    { text: '生成待定项目', emoji: '🚀', isCommand: true },
     { text: '写一个简单的JavaScript函数', emoji: '💻' },
     { text: '推荐一些学习资源', emoji: '📚' }
   ];
@@ -405,7 +506,7 @@ const handleSaveKnowledge = useCallback(async (knowledgeData) => {
           </div>
           <div>
             <h2 className="text-lg font-semibold text-gray-900">AI 聊天助手</h2>
-            <p className="text-xs text-gray-600">基于先进语言模型</p>
+            <p className="text-xs text-gray-600">支持指令识别和项目生成</p>
           </div>
         </div>
         
@@ -482,6 +583,12 @@ const handleSaveKnowledge = useCallback(async (knowledgeData) => {
           <div className="flex flex-col items-center justify-center h-full text-gray-500 py-8">
             <div className="text-6xl mb-6 animate-bounce">🤖</div>
             <h3 className="text-2xl font-bold text-gray-700 mb-4">欢迎使用 AI 聊天助手</h3>
+            <p className="text-gray-600 mb-6 text-center max-w-md">
+              支持智能指令识别，试试说：
+              <span className="block text-blue-600 font-medium mt-2">
+                "转入知识库" 或 "生成待定项目"
+              </span>
+            </p>
             
             {/* 快捷提示 */}
             <div className="w-full max-w-md">
@@ -490,10 +597,17 @@ const handleSaveKnowledge = useCallback(async (knowledgeData) => {
                   <button
                     key={index}
                     onClick={() => setInputText(suggestion.text)}
-                    className="text-sm text-gray-700 bg-white hover:bg-gray-50 px-4 py-3 rounded-lg border transition-all duration-200 text-left hover:shadow-sm hover:border-blue-200"
+                    className={`text-sm text-gray-700 bg-white hover:bg-gray-50 px-4 py-3 rounded-lg border transition-all duration-200 text-left hover:shadow-sm ${
+                      suggestion.isCommand 
+                        ? 'hover:border-green-300 border-green-200 bg-green-50' 
+                        : 'hover:border-blue-200'
+                    }`}
                   >
                     <span className="mr-2">{suggestion.emoji}</span>
                     {suggestion.text}
+                    {suggestion.isCommand && (
+                      <span className="ml-2 text-xs text-green-600 bg-green-100 px-1 rounded">指令</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -514,10 +628,14 @@ const handleSaveKnowledge = useCallback(async (knowledgeData) => {
                     ? 'bg-gradient-to-r from-blue-500 to-blue-600' 
                     : message.type === 'ai'
                     ? 'bg-gradient-to-r from-purple-500 to-pink-600'
+                    : message.type === 'command'
+                    ? 'bg-gradient-to-r from-green-500 to-green-600'
                     : 'bg-gradient-to-r from-orange-500 to-red-600'
                 }`}>
                   <span className="text-white text-xs font-bold">
-                    {message.type === 'user' ? '您' : message.type === 'ai' ? 'AI' : '!'}
+                    {message.type === 'user' ? '您' : 
+                     message.type === 'ai' ? 'AI' : 
+                     message.type === 'command' ? '✓' : '!'}
                   </span>
                 </div>
 
@@ -531,12 +649,17 @@ const handleSaveKnowledge = useCallback(async (knowledgeData) => {
                         ? 'bg-blue-500 text-white shadow-md' 
                         : message.type === 'ai'
                         ? 'bg-white text-gray-800 shadow-sm border border-gray-200'
+                        : message.type === 'command'
+                        ? 'bg-green-50 text-green-800 border border-green-200'
                         : 'bg-orange-50 text-orange-800 border border-orange-200'
                     }`}
                   >
                     <div className="whitespace-pre-wrap break-words leading-relaxed">
                       {message.content}
                     </div>
+                    
+                    {/* 指令消息的特殊内容 */}
+                    {message.type === 'command' && renderCommandMessage(message)}
                   </div>
                   
                   {/* 保存按钮 - 仅AI消息显示 */}
@@ -585,7 +708,7 @@ const handleSaveKnowledge = useCallback(async (knowledgeData) => {
               value={inputText}
               onChange={handleInputChange}
               onKeyPress={handleKeyPress}
-              placeholder={isMobile ? "输入消息..." : "输入您的问题...（Enter发送，Shift+Enter换行）"}
+              placeholder={isMobile ? "输入消息..." : "输入您的问题或指令...（Enter发送，Shift+Enter换行）"}
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all bg-white"
               rows="1"
               disabled={isLoading}
@@ -621,6 +744,11 @@ const handleSaveKnowledge = useCallback(async (knowledgeData) => {
               </>
             )}
           </button>
+        </div>
+        
+        {/* 指令提示 */}
+        <div className="mt-2 text-xs text-gray-500">
+          试试说：<span className="text-blue-600">"转入知识库"</span>、<span className="text-blue-600">"生成待定项目"</span>
         </div>
       </div>
 
