@@ -30,57 +30,54 @@ const ChatTabBase = ({
     setTimeout(() => setToast(null), 3000);
   }, []);
 
-  // 保存知识点到后端 - 修复版本
-  const handleSaveKnowledge = useCallback(async (knowledgeData) => {
-    try {
-      console.log('💾 保存知识点:', knowledgeData);
-      
-      const saveData = {
-        content: [
-          {
-            type: 'text',
-            content: knowledgeData.content
-          }
-        ],
-        category: knowledgeData.category,
-        tags: knowledgeData.tags,
-        source: knowledgeData.source || 'chat'
-      };
+  // 在 ChatTabBase.js 中修复 handleSaveKnowledge 函数
+const handleSaveKnowledge = useCallback(async (knowledgeData) => {
+  try {
+    console.log('💾 保存知识点:', knowledgeData);
+    
+    // 修复：直接使用 knowledgeData，不要重新包装 content
+    const saveData = {
+      title: knowledgeData.title, // 添加 title 字段
+      content: knowledgeData.content, // 直接使用字符串内容
+      category: knowledgeData.category,
+      tags: knowledgeData.tags,
+      source: knowledgeData.source || 'chat'
+    };
 
-      console.log('📤 发送保存请求:', saveData);
+    console.log('📤 发送保存请求:', saveData);
 
-      const response = await fetch('/api/knowledge/save', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(saveData)
-      });
+    const response = await fetch('/api/knowledge/save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify(saveData)
+    });
 
-      const data = await response.json();
-      console.log('📨 保存响应:', data);
+    const data = await response.json();
+    console.log('📨 保存响应:', data);
 
-      if (!response.ok) {
-        const errorMessage = data.error || data.message || `保存失败: ${response.status}`;
-        console.error('保存知识点响应错误:', errorMessage);
-        throw new Error(errorMessage);
-      }
-
-      if (data.success) {
-        console.log('✅ 知识点保存成功', data);
-        showToast('知识点保存成功', 'success');
-      } else {
-        throw new Error(data.error || '保存失败');
-      }
-      
-      return data;
-    } catch (error) {
-      console.error('❌ 保存知识点失败:', error);
-      showToast(`保存失败: ${error.message}`, 'error');
-      throw error;
+    if (!response.ok) {
+      const errorMessage = data.error || data.message || `保存失败: ${response.status}`;
+      console.error('保存知识点响应错误:', errorMessage);
+      throw new Error(errorMessage);
     }
-  }, [showToast]);
+
+    if (data.success) {
+      console.log('✅ 知识点保存成功', data);
+      showToast('知识点保存成功', 'success');
+    } else {
+      throw new Error(data.error || '保存失败');
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('❌ 保存知识点失败:', error);
+    showToast(`保存失败: ${error.message}`, 'error');
+    throw error;
+  }
+}, [showToast]);
 
   // 处理保存知识点
   const handleSaveMessage = useCallback((message) => {

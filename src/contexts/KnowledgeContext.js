@@ -1,4 +1,4 @@
-// src/contexts/KnowledgeContext.js - 最终修复版本
+// src/contexts/KnowledgeContext.js - 修复更新逻辑版本
 import { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 
 const KnowledgeContext = createContext();
@@ -15,29 +15,24 @@ const initialState = {
     tags: []
   },
   lastUpdated: null,
-  error: null
+  error: null,
+  projectGeneration: {
+    isGenerating: false,
+    currentKnowledge: null,
+    error: null
+  },
+  editingKnowledge: null
 };
 
 // 示例数据
 const sampleKnowledgeData = [
   {
-    id: 1,
+    id: 'sample-1',
     title: '欢迎使用知识库',
     content: '这是您的第一个知识点！您可以在AI对话中保存重要的对话内容到这里。',
     category: '文档',
     tags: '欢迎,使用指南,示例',
     source: '系统示例',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    userId: 1
-  },
-  {
-    id: 2,
-    title: 'React最佳实践',
-    content: '使用函数组件和Hooks，保持组件简洁，合理使用useMemo和useCallback优化性能。',
-    category: '技术',
-    tags: 'React,前端,JavaScript',
-    source: '团队内部文档',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     userId: 1
@@ -87,11 +82,13 @@ const knowledgeReducer = (state, action) => {
       };
     
     case 'UPDATE_KNOWLEDGE_SUCCESS':
+      const updatedItems = state.knowledgeItems.map(item => 
+        item.id === action.payload.id ? { ...item, ...action.payload } : item
+      );
       return {
         ...state,
-        knowledgeItems: state.knowledgeItems.map(item => 
-          item.id === action.payload.id ? action.payload : item
-        ),
+        knowledgeItems: updatedItems,
+        editingKnowledge: null,
         lastUpdated: new Date().toISOString(),
         error: null
       };
@@ -134,6 +131,58 @@ const knowledgeReducer = (state, action) => {
         tags: action.payload
       };
     
+    case 'SET_EDITING_KNOWLEDGE':
+      return {
+        ...state,
+        editingKnowledge: action.payload
+      };
+    
+    case 'CLEAR_EDITING_KNOWLEDGE':
+      return {
+        ...state,
+        editingKnowledge: null
+      };
+    
+    case 'PROJECT_GENERATION_START':
+      return {
+        ...state,
+        projectGeneration: {
+          isGenerating: true,
+          currentKnowledge: action.payload,
+          error: null
+        }
+      };
+    
+    case 'PROJECT_GENERATION_SUCCESS':
+      return {
+        ...state,
+        projectGeneration: {
+          isGenerating: false,
+          currentKnowledge: null,
+          error: null
+        }
+      };
+    
+    case 'PROJECT_GENERATION_ERROR':
+      return {
+        ...state,
+        projectGeneration: {
+          isGenerating: false,
+          currentKnowledge: null,
+          error: action.payload
+        }
+      };
+    
+    case 'PROJECT_GENERATION_RESET':
+      return {
+        ...state,
+        projectGeneration: {
+          isGenerating: false,
+          currentKnowledge: null,
+          error: null
+        }
+      };
+    
     default:
       return state;
   }
@@ -142,16 +191,16 @@ const knowledgeReducer = (state, action) => {
 export const KnowledgeProvider = ({ children }) => {
   const [state, dispatch] = useReducer(knowledgeReducer, initialState);
 
-  // 安全的 fetch 包装函数
+  // 优化的安全 fetch 函数
   const safeFetch = useCallback(async (url, options = {}) => {
     try {
-      // 添加超时控制
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...options.headers,
@@ -162,23 +211,21 @@ export const KnowledgeProvider = ({ children }) => {
       return response;
     } catch (error) {
       if (error.name === 'AbortError') {
-        throw new Error('请求超时');
+        throw new Error('请求超时，请稍后重试');
       }
-      throw new Error(`网络错误: ${error.message}`);
+      throw error;
     }
   }, []);
 
-  // 从API加载知识库数据 - 完全修复版本
+  // 从API加载知识库数据
   const loadKnowledgeItems = useCallback(async () => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
-      
       console.log('🔄 开始加载知识库数据...');
       
       let result;
       
       try {
-        // 尝试调用 API
         const response = await safeFetch('/api/knowledge');
         
         if (!response.ok) {
@@ -186,11 +233,13 @@ export const KnowledgeProvider = ({ children }) => {
         }
         
         result = await response.json();
-        console.log('✅ 从API加载知识库数据成功');
+        console.log('✅ 从API加载知识库数据成功:', {
+          count: result.data?.length,
+          success: result.success
+        });
         
       } catch (apiError) {
         console.warn('⚠️ API调用失败，使用示例数据:', apiError.message);
-        // 使用示例数据
         result = {
           success: true,
           data: sampleKnowledgeData,
@@ -215,10 +264,16 @@ export const KnowledgeProvider = ({ children }) => {
         const tags = [...new Set(allTags)];
         
         if (categories.length > 0) {
-          dispatch({ type: 'SET_CATEGORIES', payload: [...new Set([...initialState.categories, ...categories])] });
+          dispatch({ 
+            type: 'SET_CATEGORIES', 
+            payload: [...new Set([...initialState.categories, ...categories])] 
+          });
         }
         if (tags.length > 0) {
-          dispatch({ type: 'SET_TAGS', payload: [...new Set([...initialState.tags, ...tags])] });
+          dispatch({ 
+            type: 'SET_TAGS', 
+            payload: [...new Set([...initialState.tags, ...tags])] 
+          });
         }
       } else {
         throw new Error(result.error || '数据加载失败');
@@ -228,7 +283,7 @@ export const KnowledgeProvider = ({ children }) => {
       console.error('❌ 加载知识库最终错误:', error);
       dispatch({ 
         type: 'LOAD_KNOWLEDGE_ERROR', 
-        payload: '知识库加载失败，请检查网络连接'
+        payload: error.message || '知识库加载失败，请检查网络连接'
       });
     }
   }, [safeFetch]);
@@ -238,23 +293,20 @@ export const KnowledgeProvider = ({ children }) => {
     console.log('💾 准备添加知识点:', knowledgeData);
     
     try {
-      // 创建本地数据（乐观更新）
       const localItem = {
-        id: Date.now(), // 临时ID
+        id: `temp-${Date.now()}`,
         title: knowledgeData.title || '未命名文档',
         content: knowledgeData.content || '',
         category: knowledgeData.category || '技术',
         tags: knowledgeData.tags || '',
-        source: knowledgeData.source || '',
+        source: knowledgeData.source || '用户添加',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         userId: 1
       };
       
-      // 立即更新UI
       dispatch({ type: 'ADD_KNOWLEDGE_SUCCESS', payload: localItem });
       
-      // 尝试保存到API（后台操作）
       try {
         const response = await safeFetch('/api/knowledge/save', {
           method: 'POST',
@@ -264,8 +316,9 @@ export const KnowledgeProvider = ({ children }) => {
         if (response.ok) {
           const result = await response.json();
           console.log('✅ API保存成功');
-          // 重新加载确保数据同步
           await loadKnowledgeItems();
+        } else {
+          console.warn('⚠️ API保存失败，数据仅保存在本地');
         }
       } catch (apiError) {
         console.warn('⚠️ API保存失败，数据仅保存在本地:', apiError.message);
@@ -275,6 +328,7 @@ export const KnowledgeProvider = ({ children }) => {
       
     } catch (error) {
       console.error('❌ 添加知识点失败:', error);
+      await loadKnowledgeItems();
       throw error;
     }
   }, [safeFetch, loadKnowledgeItems]);
@@ -284,58 +338,167 @@ export const KnowledgeProvider = ({ children }) => {
     console.log('🗑️ 准备删除知识点:', id);
     
     try {
-      // 立即从本地状态移除（乐观更新）
+      if (id.startsWith('temp-')) {
+        dispatch({ type: 'DELETE_KNOWLEDGE_SUCCESS', payload: id });
+        return { success: true };
+      }
+      
+      const itemToDelete = state.knowledgeItems.find(item => item.id === id);
       dispatch({ type: 'DELETE_KNOWLEDGE_SUCCESS', payload: id });
       
-      // 尝试调用API删除（后台操作）
       try {
         const response = await safeFetch(`/api/knowledge/${id}`, {
           method: 'DELETE',
         });
         
         if (!response.ok) {
-          console.warn('⚠️ API删除失败，但已从本地移除');
+          throw new Error(`删除失败: ${response.status}`);
         }
+        
+        console.log('✅ API删除成功');
+        return { success: true };
+        
       } catch (apiError) {
-        console.warn('⚠️ API删除失败，但已从本地移除:', apiError.message);
+        console.warn('⚠️ API删除失败，数据仅从本地移除:', apiError.message);
+        return { success: true, localOnly: true };
       }
-      
-      return { success: true };
       
     } catch (error) {
       console.error('❌ 删除知识点失败:', error);
+      await loadKnowledgeItems();
       throw error;
     }
-  }, [safeFetch]);
+  }, [safeFetch, state.knowledgeItems, loadKnowledgeItems]);
 
-  // 更新知识点
-  const updateKnowledge = useCallback(async (id, knowledgeData) => {
-    console.log('📝 准备更新知识点:', id, knowledgeData);
+  // 在 KnowledgeContext.js 中更新 updateKnowledge 函数
+const updateKnowledge = useCallback(async (id, knowledgeData) => {
+  console.log('📝 准备更新知识点:', { id, knowledgeData });
+  
+  try {
+    // 如果是临时ID，直接更新本地数据
+    if (id.startsWith('temp-')) {
+      const updatedItem = {
+        ...state.knowledgeItems.find(item => item.id === id),
+        ...knowledgeData,
+        updatedAt: new Date().toISOString()
+      };
+      dispatch({ type: 'UPDATE_KNOWLEDGE_SUCCESS', payload: updatedItem });
+      return { success: true, knowledge: updatedItem };
+    }
+
+    console.log('🔄 发送API更新请求...');
+    const response = await safeFetch(`/api/knowledge/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(knowledgeData),
+    });
+    
+    console.log('📨 API响应状态:', response.status, response.statusText);
+    
+    if (!response.ok) {
+      let errorData;
+      try {
+        errorData = await response.json();
+        console.error('❌ API错误响应:', errorData);
+      } catch (parseError) {
+        console.error('❌ API响应解析失败:', parseError);
+        errorData = { 
+          error: `HTTP ${response.status}: ${response.statusText}`,
+          details: '无法解析错误响应'
+        };
+      }
+      
+      // 提供更具体的错误信息
+      const errorMessage = errorData.error || errorData.details || `更新失败: ${response.status}`;
+      throw new Error(errorMessage);
+    }
+
+    const result = await response.json();
+    console.log('✅ API更新成功响应:', result);
+    
+    if (result.success) {
+      console.log('✅ API更新成功，更新本地状态');
+      // 更新本地状态
+      dispatch({ type: 'UPDATE_KNOWLEDGE_SUCCESS', payload: result.data });
+      return { success: true, knowledge: result.data };
+    } else {
+      throw new Error(result.error || '更新失败');
+    }
+    
+  } catch (error) {
+    console.error('❌ 更新知识点失败:', error);
+    // 重新加载数据确保状态一致
+    await loadKnowledgeItems();
+    throw error;
+  }
+}, [safeFetch, state.knowledgeItems, loadKnowledgeItems]);
+
+  // 设置编辑知识点
+  const setEditingKnowledge = useCallback((knowledge) => {
+    dispatch({ type: 'SET_EDITING_KNOWLEDGE', payload: knowledge });
+  }, []);
+
+  // 清除编辑状态
+  const clearEditingKnowledge = useCallback(() => {
+    dispatch({ type: 'CLEAR_EDITING_KNOWLEDGE' });
+  }, []);
+
+  // 从知识点生成项目
+  const generateProjectFromKnowledge = useCallback(async (knowledgeId) => {
+    console.log('🚀 准备从知识点生成项目:', knowledgeId);
     
     try {
-      const response = await safeFetch(`/api/knowledge/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(knowledgeData),
+      const knowledge = state.knowledgeItems.find(item => item.id === knowledgeId);
+      if (!knowledge) {
+        throw new Error('知识点不存在');
+      }
+      
+      dispatch({ 
+        type: 'PROJECT_GENERATION_START', 
+        payload: knowledge 
+      });
+      
+      const response = await safeFetch('/api/projects/generate-from-knowledge', {
+        method: 'POST',
+        body: JSON.stringify({ 
+          knowledgeId,
+          title: knowledge.title,
+          content: knowledge.content,
+          category: knowledge.category,
+          tags: knowledge.tags
+        }),
       });
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
       
       const result = await response.json();
       
       if (result.success) {
-        console.log('✅ 更新知识点成功:', id);
-        await loadKnowledgeItems(); // 重新加载确保数据同步
+        console.log('✅ 项目生成成功:', result.project);
+        dispatch({ type: 'PROJECT_GENERATION_SUCCESS' });
         return result;
       } else {
-        throw new Error(result.error || result.message || '更新失败');
+        throw new Error(result.error || result.message || '项目生成失败');
       }
+      
     } catch (error) {
-      console.error('❌ 更新知识点失败:', error);
+      console.error('❌ 生成项目失败:', error);
+      dispatch({ 
+        type: 'PROJECT_GENERATION_ERROR', 
+        payload: error.message 
+      });
       throw error;
     }
-  }, [safeFetch, loadKnowledgeItems]);
+  }, [safeFetch, state.knowledgeItems]);
+
+  const resetProjectGeneration = useCallback(() => {
+    dispatch({ type: 'PROJECT_GENERATION_RESET' });
+  }, []);
 
   const addCategory = useCallback((category) => {
     if (category && category.trim()) {
@@ -379,9 +542,13 @@ export const KnowledgeProvider = ({ children }) => {
       total: state.knowledgeItems.length,
       technical: technicalDocs.length,
       product: productDocs.length,
-      monthlyNew: monthlyNew.length
+      monthlyNew: monthlyNew.length,
+      byCategory: state.categories.reduce((acc, category) => {
+        acc[category] = state.knowledgeItems.filter(item => item.category === category).length;
+        return acc;
+      }, {})
     };
-  }, [state.knowledgeItems]);
+  }, [state.knowledgeItems, state.categories]);
 
   // 获取筛选后的知识库项目
   const getFilteredKnowledge = useCallback(() => {
@@ -414,6 +581,17 @@ export const KnowledgeProvider = ({ children }) => {
     return filtered;
   }, [state.knowledgeItems, state.searchQuery, state.filters]);
 
+  // 获取推荐的项目生成知识点
+  const getRecommendedForProjectGeneration = useCallback(() => {
+    return state.knowledgeItems.filter(item => {
+      const hasGoodContent = item.content && item.content.length > 200;
+      const isTechnical = ['技术', '编程', '开发', '代码'].includes(item.category);
+      const hasCodeKeywords = /(代码|实现|函数|方法|组件|API|接口)/.test(item.content);
+      
+      return hasGoodContent && (isTechnical || hasCodeKeywords);
+    });
+  }, [state.knowledgeItems]);
+
   // 初始化加载
   useEffect(() => {
     console.log('🚀 KnowledgeProvider 初始化');
@@ -430,6 +608,8 @@ export const KnowledgeProvider = ({ children }) => {
     filters: state.filters,
     lastUpdated: state.lastUpdated,
     error: state.error,
+    projectGeneration: state.projectGeneration,
+    editingKnowledge: state.editingKnowledge,
     
     // 操作
     loadKnowledgeItems,
@@ -441,9 +621,18 @@ export const KnowledgeProvider = ({ children }) => {
     setSearchQuery,
     setFilters,
     
+    // 编辑操作
+    setEditingKnowledge,
+    clearEditingKnowledge,
+    
+    // 项目生成操作
+    generateProjectFromKnowledge,
+    resetProjectGeneration,
+    
     // 计算属性
     getFilteredKnowledge,
-    getStatistics
+    getStatistics,
+    getRecommendedForProjectGeneration
   };
 
   return (

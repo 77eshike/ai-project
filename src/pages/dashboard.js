@@ -1,5 +1,6 @@
-// pages/dashboard.js (最终修复版)
-import { getSession } from 'next-auth/react';
+// src/pages/dashboard.js - 修复版本
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../lib/auth';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { useUser } from '../contexts/UserContext';
@@ -12,10 +13,10 @@ import ChatTab from '../components/chat';
 import KnowledgeTab from '../components/KnowledgeTab';
 import SettingsTab from '../components/SettingsTab';
 
-// 定义可用的标签页常量
+// 🔧 修复：确保 TABS 常量正确定义
 const TABS = {
   OVERVIEW: 'overview',
-  PROJECTS: 'projects',
+  PROJECTS: 'projects', 
   CHAT: 'chat',
   KNOWLEDGE: 'knowledge',
   SETTINGS: 'settings'
@@ -53,7 +54,7 @@ const TAB_CONFIG = {
 // 获取所有标签页值
 const TAB_VALUES = Object.values(TABS);
 
-// 加载组件 - 修复水合问题
+// 加载组件
 const LoadingSpinner = ({ message = '加载中...' }) => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50">
     <div className="text-center">
@@ -80,14 +81,28 @@ const ErrorFallback = ({ error, resetErrorBoundary }) => (
   </div>
 );
 
-export default function Dashboard({ session, error: serverError }) {
+export default function Dashboard({ session: serverSession, error: serverError }) {
   const router = useRouter();
   const { user, loading, logout, voiceEnabled, toggleVoice } = useUser();
+  
+  // 🔧 修复：使用字符串字面量初始化，避免 TABS 未定义
+  const [activeTab, setActiveTab] = useState('overview');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [activeTab, setActiveTab] = useState(TABS.OVERVIEW); // 默认值，服务端和客户端保持一致
   const [isMobile, setIsMobile] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [error, setError] = useState(serverError || null);
+
+  // 🔧 新增：调试信息
+  useEffect(() => {
+    if (isClient) {
+      console.log('🔍 Dashboard 调试信息:', {
+        hasServerSession: !!serverSession,
+        hasUserContext: !!user,
+        activeTab,
+        TABS: typeof TABS // 检查 TABS 是否定义
+      });
+    }
+  }, [isClient, serverSession, user, activeTab]);
 
   // 修复水合错误：在客户端才设置状态
   useEffect(() => {
@@ -98,6 +113,7 @@ export default function Dashboard({ session, error: serverError }) {
   useEffect(() => {
     if (isClient && router.query.tab) {
       const tab = router.query.tab.toString();
+      // 🔧 修复：使用 TAB_VALUES 检查有效性
       if (TAB_VALUES.includes(tab)) {
         console.log(`从路由参数设置标签页: ${tab}`);
         setActiveTab(tab);
@@ -127,13 +143,28 @@ export default function Dashboard({ session, error: serverError }) {
     }
   }, [isClient]);
 
-  // 用户认证检查
+  // 🔧 修复：用户认证检查逻辑
   useEffect(() => {
-    if (isClient && !user && !loading) {
-      console.log('用户未认证，跳转到登录页');
-      router.push('/auth/signin');
+    if (isClient) {
+      console.log('🔍 认证检查:', {
+        hasServerSession: !!serverSession,
+        hasUserContext: !!user,
+        loading
+      });
+
+      // 如果服务器端有会话但客户端useUser没有用户数据，等待加载
+      if (serverSession && !user && !loading) {
+        console.log('🔄 服务器端有会话，等待useUser加载...');
+        return;
+      }
+
+      // 如果都没有会话，重定向到登录
+      if (!serverSession && !user && !loading) {
+        console.log('❌ 无会话，重定向到登录页');
+        router.push('/auth/signin');
+      }
     }
-  }, [user, loading, router, isClient]);
+  }, [user, loading, router, isClient, serverSession]);
 
   // 安全的登出处理
   const handleLogout = useCallback(async () => {
@@ -156,6 +187,7 @@ export default function Dashboard({ session, error: serverError }) {
     if (!isClient) return;
     
     try {
+      // 🔧 修复：使用 TAB_VALUES 检查有效性
       if (!TAB_VALUES.includes(tab)) {
         console.warn(`无效的标签页: ${tab}`);
         return;
@@ -263,19 +295,37 @@ export default function Dashboard({ session, error: serverError }) {
     );
   }
 
-  // 加载状态
-  if (loading || !isClient) {
-    return <LoadingSpinner message="初始化控制台..." />;
+  // 🔧 修复：加载状态逻辑
+  if (!isClient) {
+    return <LoadingSpinner message="初始化客户端..." />;
   }
 
-  // 用户未认证
-  if (!user) {
+  // 🔧 修复：认证状态检查
+  const isAuthenticated = serverSession || user;
+  const stillLoading = loading && !user;
+
+  if (stillLoading) {
+    return <LoadingSpinner message="加载用户信息..." />;
+  }
+
+  if (!isAuthenticated) {
     return <LoadingSpinner message="验证用户身份..." />;
   }
 
   // 主错误边界
   if (error) {
     return <ErrorFallback error={error} resetErrorBoundary={resetError} />;
+  }
+
+  // 🔧 使用服务器端会话或客户端用户数据
+  const currentUser = user || (serverSession ? { 
+    id: serverSession.user.id,
+    email: serverSession.user.email,
+    name: serverSession.user.name
+  } : null);
+
+  if (!currentUser) {
+    return <LoadingSpinner message="准备用户数据..." />;
   }
 
   return (
@@ -289,7 +339,7 @@ export default function Dashboard({ session, error: serverError }) {
 
       <KnowledgeProvider>
         <DashboardLayout 
-          user={user} 
+          user={currentUser} 
           activeTab={activeTab} 
           setActiveTab={handleTabChange} 
           isMobile={isMobile}
@@ -305,13 +355,19 @@ export default function Dashboard({ session, error: serverError }) {
   );
 }
 
-// 服务器端渲染 - 修复版本
+// 服务器端渲染
 export async function getServerSideProps(context) {
   try {
-    const session = await getSession(context);
+    const session = await getServerSession(context.req, context.res, authOptions);
 
-    if (!session) {
-      console.log('未找到会话，重定向到登录页');
+    console.log('🔍 仪表板服务器端会话检查:', {
+      hasSession: !!session,
+      userId: session?.user?.id,
+      email: session?.user?.email
+    });
+
+    if (!session?.user) {
+      console.log('❌ 服务器端未认证，重定向到登录页');
       return {
         redirect: {
           destination: '/auth/signin',
@@ -320,41 +376,29 @@ export async function getServerSideProps(context) {
       };
     }
 
-    // 预加载数据示例 - 确保数据格式在服务端和客户端一致
-    // const userData = await getUserData(session.user.id);
-    // const knowledgeStats = await getKnowledgeStats(session.user.id);
-
-    console.log('仪表板服务器端渲染完成', {
-      userId: session.user.id,
-      email: session.user.email
-    });
+    console.log('✅ 服务器端认证通过，渲染仪表板');
 
     return {
       props: { 
-        session,
-        // 预加载数据可以在这里传递
-        // preloadedData: {
-        //   user: userData,
-        //   knowledgeStats
-        // }
+        session: {
+          user: {
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.name
+          }
+        }
       },
     };
   } catch (error) {
-    console.error('仪表板服务器端渲染错误:', error);
+    console.error('❌ 仪表板服务器端错误:', error);
     
-    // 在开发环境显示错误详情，生产环境隐藏
-    const errorMessage = process.env.NODE_ENV === 'development' 
-      ? error.message 
-      : '服务器错误，请稍后重试';
-
     return {
       props: { 
         session: null,
-        error: errorMessage
+        error: process.env.NODE_ENV === 'development' ? error.message : '服务器错误'
       },
     };
   }
 }
 
-// 性能优化：添加显示名称
 Dashboard.displayName = 'DashboardPage';

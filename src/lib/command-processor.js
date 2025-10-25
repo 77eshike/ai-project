@@ -1,3 +1,4 @@
+// src/lib/command-processor.js - 修复版本
 import { PrismaClient } from '@prisma/client';
 import { OpenAI } from 'openai';
 
@@ -15,7 +16,9 @@ export class CommandProcessor {
       '转入知识库': this.handleSaveToKnowledge.bind(this),
       '生成待定项目': this.handleGenerateDraftProject.bind(this),
       '语音开关': this.handleToggleVoice.bind(this),
-      '整理知识库': this.handleOrganizeKnowledge.bind(this)
+      '整理知识库': this.handleOrganizeKnowledge.bind(this),
+      '保存知识': this.handleSaveToKnowledge.bind(this), // 别名
+      '创建项目': this.handleGenerateDraftProject.bind(this), // 别名
     };
   }
 
@@ -37,14 +40,11 @@ export class CommandProcessor {
     const { userId, conversationHistory } = context;
     
     try {
-      // 使用现有AI服务分类内容
-      const { categorizeContent } = await import('@/lib/ai-service');
-      
       // 总结对话内容
       const summary = await this.summarizeConversation(conversationHistory);
       
       // 自动分类
-      const category = await categorizeContent(summary);
+      const category = await this.categorizeContent(summary);
       
       // 保存到知识库
       const knowledgeItem = await prisma.knowledge.create({
@@ -53,7 +53,7 @@ export class CommandProcessor {
           category,
           tags: await this.extractTags(summary),
           source: 'chat',
-          userId
+          userId: parseInt(userId)
         }
       });
       
@@ -94,7 +94,7 @@ export class CommandProcessor {
           description: projectDraft.description,
           content: projectDraft.content,
           aiGeneratedContent: projectDraft.content,
-          ownerId: userId,
+          ownerId: parseInt(userId),
           status: 'DRAFT',
           type: 'DRAFT_PROJECT',
           visibility: 'PRIVATE'
@@ -105,7 +105,7 @@ export class CommandProcessor {
       await prisma.projectMember.create({
         data: {
           projectId: project.id,
-          userId: userId,
+          userId: parseInt(userId),
           role: 'OWNER'
         }
       });
@@ -151,18 +151,16 @@ export class CommandProcessor {
     const { userId } = context;
     
     try {
-      const { categorizeContent } = await import('@/lib/ai-service');
-      
       // 获取用户的所有知识库内容
       const knowledges = await prisma.knowledge.findMany({
-        where: { userId }
+        where: { userId: parseInt(userId) }
       });
       
       let reorganizedCount = 0;
       
       // 重新分类每条内容
       for (const knowledge of knowledges) {
-        const newCategory = await categorizeContent(knowledge.content);
+        const newCategory = await this.categorizeContent(knowledge.content);
         
         if (newCategory !== knowledge.category) {
           await prisma.knowledge.update({
@@ -192,6 +190,20 @@ export class CommandProcessor {
     }
   }
 
+  // 🔧 新增：内容分类方法（替代外部导入）
+  async categorizeContent(content) {
+    const prompt = `请对以下内容进行分类，选择最合适的类别：
+    
+内容：${content.substring(0, 500)}
+
+可选类别：技术、学习、工作、生活、创意、其他
+
+请只返回类别名称：`;
+    
+    const category = await this.callAI(prompt);
+    return category.trim() || '其他';
+  }
+
   // AI辅助方法
   async summarizeConversation(conversationHistory) {
     const prompt = `请总结以下对话的要点和关键信息：
@@ -210,7 +222,7 @@ ${content}
 请以逗号分隔返回关键词：`;
     
     const tagsStr = await this.callAI(prompt);
-    return tagsStr.split(',').map(tag => tag.trim()).slice(0, 5);
+    return tagsStr.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0).slice(0, 5);
   }
 
   async generateProjectDraft(conversationHistory) {
@@ -228,8 +240,14 @@ ${conversationHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
     const response = await this.callAI(prompt);
     
     try {
+      // 尝试提取JSON部分
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
       return JSON.parse(response);
     } catch (error) {
+      console.log('JSON解析失败，使用默认结构:', error);
       // 如果JSON解析失败，返回默认结构
       return {
         title: '新项目',
@@ -248,12 +266,28 @@ ${conversationHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
         temperature: 0.7,
       });
 
-      return completion.choices[0]?.message?.content || '无响应内容';
+      return completion.choices[0]?.message?.content?.trim() || '无响应内容';
     } catch (error) {
       console.error('AI调用失败:', error);
-      throw new Error('AI服务暂时不可用');
+      // 返回默认值而不是抛出错误，避免影响用户体验
+      return '默认内容';
     }
   }
+
+  // 🔧 新增：销毁方法，用于清理资源
+  async destroy() {
+    await prisma.$disconnect();
+  }
+}
+
+// 创建单例实例
+let commandProcessorInstance = null;
+
+export function getCommandProcessor() {
+  if (!commandProcessorInstance) {
+    commandProcessorInstance = new CommandProcessor();
+  }
+  return commandProcessorInstance;
 }
 
 export default CommandProcessor;

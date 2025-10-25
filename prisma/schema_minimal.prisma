@@ -19,11 +19,10 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  accounts      Account[]
-  sessions      Session[]
-  knowledges    Knowledge[]
+  accounts    Account[]
+  sessions    Session[]
+  knowledges  Knowledge[]
   ownedProjects Project[]
-  projectMembers ProjectMember[]
 
   @@map("User")
 }
@@ -91,8 +90,7 @@ model Project {
   publishedAt DateTime?
   knowledgeSourceId String?
   
-  owner         User           @relation(fields: [ownerId], references: [id])
-  projectMembers ProjectMember[]
+  owner User @relation(fields: [ownerId], references: [id])
 
   @@map("projects")
 }

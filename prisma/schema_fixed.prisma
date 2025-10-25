@@ -1,0 +1,254 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id            Int          @id @default(autoincrement())
+  email         String       @unique
+  name          String?
+  password      String?
+  emailVerified DateTime?
+  image         String?
+  role          String?
+  status        Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  accounts            Account[]
+  sessions            Session[]
+  files               File[]
+  knowledges          Knowledge[]
+  conversations       Conversation[]
+  ownedProjects       Project[]                 @relation("ProjectOwner")
+  projectMembers      ProjectMember[]           @relation("ProjectMembers")
+  projectComments     ProjectComment[]          @relation("ProjectComments")
+  createdRecruitments Recruitment[]             @relation("RecruitmentCreator")
+  recruitmentApplications RecruitmentApplication[] @relation("RecruitmentApplications")
+  ideas               Idea[]
+  chatMessages        ChatMessage[]
+  userPreference      UserPreference?
+
+  @@map("users")
+}
+
+model Account {
+  id                 String   @id @default(cuid())
+  userId             Int
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       Int
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model File {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  filename  String
+  key       String
+  size      Int
+  mimeType  String
+  url       String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Knowledge {
+  id        String   @id @default(cuid())
+  content   String
+  category  String
+  tags      String
+  source    String
+  userId    Int
+  ideaId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  idea Idea? @relation(fields: [ideaId], references: [id])
+  generatedProjects Project[] @relation("KnowledgeToProject")
+
+  @@index([userId])
+  @@index([category])
+  @@index([ideaId])
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  title     String
+  messages  Json
+  userId    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  metadata  Json?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("conversations")
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  content     String?
+  type        String   @default("DRAFT_PROJECT")
+  status      String   @default("DRAFT")
+  visibility  String   @default("PRIVATE")
+  ownerId     Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  publishedAt DateTime?
+  knowledgeSourceId String?
+  
+  owner       User     @relation(fields: [ownerId], references: [id], name: "ProjectOwner")
+  members     ProjectMember[]
+  comments    ProjectComment[]
+  recruitments Recruitment[]
+  knowledgeSource Knowledge? @relation(fields: [knowledgeSourceId], references: [id], name: "KnowledgeToProject")
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    Int
+  role      String   @default("MEMBER")
+  joinedAt  DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [userId], references: [id], name: "ProjectMembers")
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+model ProjectComment {
+  id        String   @id @default(cuid())
+  content   String
+  projectId String
+  userId    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [userId], references: [id], name: "ProjectComments")
+
+  @@map("project_comments")
+}
+
+model Recruitment {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  requirements String?
+  projectId   String
+  createdById Int
+  status      String   @default("OPEN")
+  maxMembers  Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project @relation(fields: [projectId], references: [id])
+  createdBy   User    @relation(fields: [createdById], references: [id], name: "RecruitmentCreator")
+  applications RecruitmentApplication[]
+
+  @@map("recruitments")
+}
+
+model RecruitmentApplication {
+  id            String   @id @default(cuid())
+  recruitmentId String
+  applicantId   Int
+  message       String?
+  status        String   @default("PENDING")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  recruitment Recruitment @relation(fields: [recruitmentId], references: [id])
+  applicant   User        @relation(fields: [applicantId], references: [id], name: "RecruitmentApplications")
+
+  @@unique([recruitmentId, applicantId])
+  @@map("recruitment_applications")
+}
+
+model Idea {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  userId      Int
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user      User        @relation(fields: [userId], references: [id])
+  chats     ChatMessage[]
+  knowledge Knowledge[]
+  
+  @@map("ideas")
+}
+
+model ChatMessage {
+  id          String   @id @default(cuid())
+  ideaId      String
+  userId      Int
+  content     String
+  role        String
+  messageType String   @default("TEXT")
+  voiceUrl    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  
+  idea Idea @relation(fields: [ideaId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+  
+  @@map("chat_messages")
+}
+
+model UserPreference {
+  id           String   @id @default(cuid())
+  userId       Int      @unique
+  voiceEnabled Boolean  @default(true)
+  voicePackage String   @default("friendly")
+  chatStyle    String   @default("casual")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id])
+  
+  @@map("user_preferences")

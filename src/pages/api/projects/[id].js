@@ -1,131 +1,163 @@
+// pages/api/projects/[id].js - 修复版本
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../lib/auth";
 import prisma from '../../../lib/prisma';
 
 export default async function handler(req, res) {
-  const session = await getServerSession(req, res, authOptions);
-  
-  if (!session) {
-    return res.status(401).json({ error: '未经授权的访问' });
+  // 设置 CORS 头
+  res.setHeader('Access-Control-Allow-Origin', 'https://localhost:3001');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
-  const { id } = req.query;
+  console.log('🛠️ 项目详情API请求:', { 
+    method: req.method, 
+    projectId: req.query.id,
+    timestamp: new Date().toISOString()
+  });
 
   try {
-    // 将用户 ID 转换为数字
-    const userId = parseInt(session.user.id);
+    const session = await getServerSession(req, res, authOptions);
+    
+    console.log('🔍 会话验证:', {
+      hasSession: !!session,
+      userId: session?.user?.id,
+      userEmail: session?.user?.email
+    });
 
-    // 检查项目访问权限
+    if (!session?.user?.id) {
+      console.warn('🚫 未授权访问');
+      return res.status(401).json({ 
+        success: false,
+        error: '请先登录',
+        code: 'UNAUTHORIZED'
+      });
+    }
+
+    const { id } = req.query;
+
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ 
+        success: false,
+        error: '无效的项目ID'
+      });
+    }
+
+    const userId = parseInt(session.user.id);
+    if (isNaN(userId)) {
+      return res.status(400).json({ 
+        success: false,
+        error: '无效的用户ID'
+      });
+    }
+
+    console.log('📂 处理项目详情:', { projectId: id, userId });
+
+    // 简化项目查询 - 移除可能出错的字段
     const project = await prisma.project.findFirst({
       where: {
-        id,
+        id: id,
         OR: [
           { ownerId: userId },
-          { members: { some: { userId: userId } } },
-          { visibility: 'PUBLIC' }
+          { members: { some: { userId: userId } } }
         ]
       },
       include: {
         owner: {
-          select: { id: true, name: true, email: true, image: true }
+          select: { 
+            id: true, 
+            name: true, 
+            email: true
+          }
         },
         members: {
           include: {
             user: {
-              select: { id: true, name: true, email: true, image: true }
+              select: { 
+                id: true, 
+                name: true, 
+                email: true
+              }
             }
           }
         },
-        comments: {
-          include: {
-            user: {
-              select: { id: true, name: true, email: true, image: true }
-            }
-          },
-          orderBy: { createdAt: 'desc' }
-        },
-        recruitments: {
-          include: {
-            _count: {
-              select: {
-                applications: true
-              }
-            }
+        _count: {
+          select: {
+            members: true,
+            comments: true
           }
         }
       }
     });
+
+    console.log('🔍 项目查询结果:', project ? `找到项目: ${project.title}` : '未找到项目');
 
     if (!project) {
       return res.status(404).json({ 
         success: false,
-        error: '项目不存在或无权访问' 
-      });
-    }
-
-    // 获取项目详情
-    if (req.method === 'GET') {
-      return res.status(200).json({
-        success: true,
-        project
-      });
-    }
-
-    // 更新项目
-    if (req.method === 'PUT') {
-      // 检查权限 - 只有所有者和管理员可以编辑
-      const isOwnerOrAdmin = project.ownerId === userId || 
-        project.members.some(m => m.userId === userId && ['OWNER', 'ADMIN'].includes(m.role));
-
-      if (!isOwnerOrAdmin) {
-        return res.status(403).json({ 
-          success: false,
-          error: '无权编辑此项目' 
-        });
-      }
-
-      const { title, description, content, status, visibility } = req.body;
-
-      const updatedProject = await prisma.project.update({
-        where: { id },
-        data: {
-          ...(title && { title }),
-          ...(description && { description }),
-          ...(content && { content }),
-          ...(status && { status }),
-          ...(visibility && { visibility }),
-          ...(status === 'PUBLISHED' && { publishedAt: new Date() })
-        },
-        include: {
-          owner: {
-            select: { id: true, name: true, email: true, image: true }
-          },
-          members: {
-            include: {
-              user: {
-                select: { id: true, name: true, email: true, image: true }
-              }
-            }
-          }
+        error: '项目不存在或无权访问',
+        debug: {
+          projectId: id,
+          userId: userId
         }
       });
-
-      return res.status(200).json({
-        success: true,
-        project: updatedProject
-      });
     }
 
-    return res.status(405).json({ 
-      success: false,
-      error: '方法不允许' 
+    // 获取用户角色
+    const getUserRole = () => {
+      if (project.ownerId === userId) return 'OWNER';
+      const member = project.members.find(m => m.userId === userId);
+      return member ? member.role : 'VIEWER';
+    };
+
+    const userRole = getUserRole();
+    const canEdit = ['OWNER', 'ADMIN'].includes(userRole);
+
+    // 格式化项目数据
+    const formattedProject = {
+      id: project.id,
+      title: project.title,
+      description: project.description,
+      content: project.content,
+      type: project.type,
+      status: project.status,
+      ownerId: project.ownerId,
+      owner: project.owner,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+      userRole,
+      permissions: {
+        canEdit,
+        canDelete: userRole === 'OWNER',
+      },
+      stats: {
+        totalMembers: project._count.members,
+        totalComments: project._count.comments,
+      },
+      members: project.members || []
+    };
+
+    console.log(`✅ 返回项目详情, 用户角色: ${userRole}`);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        project: formattedProject
+      }
     });
 
   } catch (error) {
-    console.error('项目详情API错误:', error);
+    console.error('❌ 项目详情API错误:', error);
+    
     return res.status(500).json({ 
       success: false,
-      error: '服务器内部错误: ' + error.message 
+      error: '服务器内部错误',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      code: process.env.NODE_ENV === 'development' ? error.code : undefined
     });
   }
 }

@@ -1,4 +1,4 @@
-// pages/auth/signup.js
+// pages/auth/signup.js - 修复硬导航版本
 import { useState, useCallback, useEffect } from 'react';
 import AuthLayout from '../../components/Layout/AuthLayout';
 import Link from 'next/link';
@@ -25,19 +25,16 @@ export default function SignUp() {
     password: false,
     confirmPassword: false
   });
+  
   const router = useRouter();
 
-  // 应用官方 hydration 解决方案
+  // 修复：改进的 hydration 处理
   useEffect(() => {
     setIsClient(true);
     
-    // 只在客户端检测设备类型
     if (typeof window !== 'undefined') {
-      const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-      const isMobileDevice = 
-        /android|avantgo|playbook|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od|ad)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino/i.test(userAgent) ||
-        /1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(userAgent.substr(0, 4));
-      
+      const userAgent = navigator.userAgent;
+      const isMobileDevice = /android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
       setIsMobile(isMobileDevice);
     }
   }, []);
@@ -56,6 +53,24 @@ export default function SignUp() {
     }));
   }, []);
 
+  // 修复：安全的路由跳转函数
+  const safeRouterPush = useCallback((url) => {
+    if (!isClient) return;
+    
+    // 检查是否已经在目标页面
+    const currentPath = window.location.pathname + window.location.search;
+    const targetPath = url.split('?')[0]; // 移除查询参数比较
+    
+    if (currentPath === targetPath) {
+      console.warn('阻止硬导航到相同URL:', url);
+      return;
+    }
+    
+    // 使用 router.push 进行客户端导航
+    router.push(url);
+  }, [router, isClient]);
+
+  // 修复：改进的提交处理
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     setError('');
@@ -84,17 +99,12 @@ export default function SignUp() {
     setIsLoading(true);
 
     try {
-      console.log('📤 发送注册请求:', {
-        username: formData.username,
-        email: formData.email,
-        password: formData.password
-      });
+      console.log('📤 发送注册请求');
 
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
         },
         body: JSON.stringify({
           username: formData.username,
@@ -103,37 +113,18 @@ export default function SignUp() {
         }),
       });
 
-      // 首先检查响应状态
       if (!response.ok) {
-        // 尝试解析错误响应
-        let errorData;
-        try {
-          errorData = await response.json();
-        } catch (parseError) {
-          // 如果响应不是JSON，使用状态文本
-          console.error('响应解析错误:', parseError);
-          setError(`注册失败: ${response.status} ${response.statusText}`);
-          return;
-        }
-        
+        const errorData = await response.json();
         setError(errorData.message || `注册失败: ${response.status}`);
-        
-        // 显示详细的错误信息
-        if (errorData.details) {
-          const detailMessages = Object.values(errorData.details).filter(Boolean);
-          if (detailMessages.length > 0) {
-            setError(detailMessages.join(', '));
-          }
-        }
         return;
       }
 
-      // 解析成功响应
       const data = await response.json();
       console.log('📥 注册响应:', data);
 
+      // 修复：使用安全的路由跳转
       alert('注册成功！请登录');
-      router.push('/auth/signin');
+      safeRouterPush('/auth/signin');
       
     } catch (error) {
       console.error('注册错误:', error);
@@ -141,7 +132,7 @@ export default function SignUp() {
     } finally {
       setIsLoading(false);
     }
-  }, [formData, agreedToTerms, router]);
+  }, [formData, agreedToTerms, safeRouterPush]);
 
   // 密码强度计算
   const getPasswordStrength = useCallback(() => {
@@ -166,10 +157,8 @@ export default function SignUp() {
 
   // 处理社交登录
   const handleSocialLogin = useCallback((provider) => {
-    // 这里可以添加实际的社交登录逻辑
     console.log(`尝试使用 ${provider} 登录`);
     // 在实际应用中，您应该调用 signIn(provider) 方法
-    // signIn(provider);
   }, []);
 
   // 服务器端渲染的简单版本
@@ -184,7 +173,6 @@ export default function SignUp() {
     );
   }
 
-  // 客户端渲染的完整版本
   return (
     <ErrorBoundary>
       <AuthLayout 
@@ -199,6 +187,7 @@ export default function SignUp() {
             </div>
           )}
 
+          {/* 表单字段保持不变 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               用户名
@@ -358,79 +347,6 @@ export default function SignUp() {
             )}
           </button>
         </form>
-
-        {/* 调试信息 - 仅开发环境显示 */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="mt-4 p-4 bg-gray-100 rounded-lg">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">调试信息</h3>
-            <div className="flex gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => console.log('表单数据:', formData)}
-                className="text-xs bg-gray-200 px-2 py-1 rounded hover:bg-gray-300"
-              >
-                查看表单数据
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const testData = {
-                    username: 'testuser',
-                    email: 'test@example.com',
-                    password: 'test123'
-                  };
-                  console.log('测试请求:', testData);
-                  try {
-                    const response = await fetch('/api/auth/register', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(testData),
-                    });
-                    const result = await response.json();
-                    console.log('测试响应:', { status: response.status, result });
-                  } catch (error) {
-                    console.error('测试错误:', error);
-                  }
-                }}
-                className="text-xs bg-gray-200 px-2 py-1 rounded hover:bg-gray-300"
-              >
-                测试API
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-8">
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">或使用以下方式注册</span>
-            </div>
-          </div>
-
-          <div className="mt-6 flex justify-center gap-4">
-            <button
-              type="button"
-              onClick={() => handleSocialLogin('google')}
-              className="w-12 h-12 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
-              disabled={isLoading}
-              aria-label="使用Google注册"
-            >
-              <i className="fab fa-google"></i>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSocialLogin('facebook')}
-              className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 transition-colors"
-              disabled={isLoading}
-              aria-label="使用Facebook注册"
-            >
-              <i className="fab fa-facebook-f"></i>
-            </button>
-          </div>
-        </div>
 
         <div className="mt-8 text-center">
           <p className="text-sm text-gray-600">

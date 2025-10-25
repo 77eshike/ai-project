@@ -21,11 +21,11 @@ model User {
 
   accounts      Account[]
   sessions      Session[]
+  files         File[]
   knowledges    Knowledge[]
-  ownedProjects Project[]
-  projectMembers ProjectMember[]
+  conversations Conversation[]
 
-  @@map("User")
+  @@map("User")  // 明确指定表名为 "User"
 }
 
 model Account {
@@ -45,7 +45,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
-  @@map("Account")
+  @@map("Account")  // 明确指定表名
 }
 
 model Session {
@@ -56,7 +56,7 @@ model Session {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("Session")
+  @@map("Session")  // 明确指定表名
 }
 
 model Knowledge {
@@ -67,12 +67,13 @@ model Knowledge {
   tags      String
   source    String
   userId    Int
+  ideaId    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("Knowledge")
+  @@map("Knowledge")  // 明确指定表名
   @@index([userId])
   @@index([category])
 }
@@ -91,10 +92,9 @@ model Project {
   publishedAt DateTime?
   knowledgeSourceId String?
   
-  owner         User           @relation(fields: [ownerId], references: [id])
-  projectMembers ProjectMember[]
+  owner User @relation(fields: [ownerId], references: [id])
 
-  @@map("projects")
+  @@map("projects")  // 这个表名是正确的
 }
 
 model ProjectMember {
@@ -108,5 +108,5 @@ model ProjectMember {
   user    User    @relation(fields: [userId], references: [id])
 
   @@unique([projectId, userId])
-  @@map("project_members")
+  @@map("project_members")  // 这个表名是正确的
 }

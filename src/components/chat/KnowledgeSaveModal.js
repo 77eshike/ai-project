@@ -1,4 +1,4 @@
-// src/components/chat/KnowledgeSaveModal.js - 修复版本
+// src/components/chat/KnowledgeSaveModal.js - 完全修复版本
 import { useState, useCallback, useEffect } from 'react';
 import { useKnowledge } from '../../contexts/KnowledgeContext';
 
@@ -10,22 +10,23 @@ const KnowledgeSaveModal = ({ message, onSave, onClose }) => {
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [customTitle, setCustomTitle] = useState('');
 
-  // 智能提取标签函数
+  // 1. 首先定义所有工具函数（不依赖其他函数）
   const extractSmartTags = useCallback((content) => {
     if (!content) return [];
     
     try {
       let text = content;
       
-      if (content.startsWith('[') && content.endsWith(']')) {
+      if (typeof content === 'string' && content.startsWith('[') && content.endsWith(']')) {
         try {
           const parsed = JSON.parse(content);
           if (Array.isArray(parsed) && parsed[0]?.content) {
             text = parsed.map(item => item.content || '').join(' ');
           }
         } catch (e) {
-          // 保持原样
+          // 解析失败，保持原样
         }
       }
       
@@ -35,6 +36,8 @@ const KnowledgeSaveModal = ({ message, onSave, onClose }) => {
         .toLowerCase()
         .trim();
       
+      if (!cleanText) return ['AI对话', '帮助文档'];
+      
       const stopWords = new Set([
         '这个', '那个', '什么', '怎么', '如何', '为什么', '可以', '应该', '需要',
         '问题', '帮助', '一下', '一些', '一种', '一个', '我们', '你们', '他们'
@@ -43,11 +46,14 @@ const KnowledgeSaveModal = ({ message, onSave, onClose }) => {
       const words = cleanText
         .split(/[\s,，.。!！?？;；:：、]+/)
         .filter(word => 
+          word && 
           word.length >= 2 && 
           word.length <= 6 && 
           !stopWords.has(word) &&
           !/\d/.test(word)
         );
+      
+      if (words.length === 0) return ['AI对话', '帮助文档'];
       
       const wordFreq = {};
       words.forEach(word => {
@@ -56,9 +62,11 @@ const KnowledgeSaveModal = ({ message, onSave, onClose }) => {
         }
       });
       
-      return Object.keys(wordFreq)
+      const sortedTags = Object.keys(wordFreq)
         .sort((a, b) => wordFreq[b] - wordFreq[a])
         .slice(0, 3);
+      
+      return sortedTags.length > 0 ? sortedTags : ['AI对话', '帮助文档'];
         
     } catch (error) {
       console.error('提取标签失败:', error);
@@ -66,21 +74,77 @@ const KnowledgeSaveModal = ({ message, onSave, onClose }) => {
     }
   }, []);
 
-  // 自动提取标签建议
-  useEffect(() => {
-    if (message.content && !inputTags) {
-      const suggestedTags = extractSmartTags(message.content);
-      if (suggestedTags.length > 0) {
-        setInputTags(suggestedTags.join(', '));
+  const generateTitle = useCallback((content) => {
+    if (!content) return '新知识点';
+    
+    try {
+      let text = content;
+      
+      if (typeof content === 'string' && content.startsWith('[') && content.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed) && parsed[0]?.content) {
+            text = parsed.map(item => item.content || '').join(' ');
+          }
+        } catch (e) {
+          // 解析失败，保持原样
+        }
+      }
+      
+      if (!text) return '新知识点';
+      
+      const cleanText = text
+        .replace(/[#*`\[\](){}【】《》""'']/g, '')
+        .replace(/\n/g, ' ')
+        .trim();
+      
+      if (!cleanText) return '新知识点';
+      
+      const firstLine = cleanText.split(/[.!?。！？]/)[0] || cleanText;
+      let title = firstLine.substring(0, 50).trim();
+      
+      if (title.length === 0) {
+        title = '未命名知识点';
+      } else if (title.length === 50) {
+        title += '...';
+      }
+      
+      return title;
+    } catch (error) {
+      console.error('生成标题失败:', error);
+      return '新知识点';
+    }
+  }, []);
+
+  // 2. 定义 handleAddCategory（不依赖 handleSave）
+  const handleAddCategory = useCallback(async () => {
+    if (newCategory.trim()) {
+      try {
+        await addCategory(newCategory.trim());
+        setSelectedCategory(newCategory.trim());
+        setNewCategory('');
+        setShowNewCategory(false);
+      } catch (error) {
+        setError('添加分类失败: ' + error.message);
       }
     }
-  }, [message.content, inputTags, extractSmartTags]);
+  }, [newCategory, addCategory]);
 
+  // 3. 定义 handleSave（现在可以安全定义，不会被其他函数提前引用）
   const handleSave = useCallback(async () => {
     setIsSubmitting(true);
     setError('');
     
     try {
+      // 验证标题
+      if (!customTitle?.trim()) {
+        throw new Error('请输入标题');
+      }
+      
+      if (customTitle.trim().length > 100) {
+        throw new Error('标题不能超过100个字符');
+      }
+
       // 处理新分类
       let finalCategory = selectedCategory;
       if (showNewCategory && newCategory.trim()) {
@@ -95,25 +159,22 @@ const KnowledgeSaveModal = ({ message, onSave, onClose }) => {
       const finalTags = inputTags
         .split(',')
         .map(tag => tag.trim())
-        .filter(tag => tag.length > 0 && tag.length <= 20)
+        .filter(tag => tag && tag.length > 0 && tag.length <= 20)
         .slice(0, 5);
       
+      // 确保有默认标签
       if (finalTags.length === 0) {
         finalTags.push('AI对话', '帮助文档');
       }
+
+      const tagsString = finalTags.join(',');
       
-      // 添加新标签到系统
-      const tagPromises = finalTags
-        .filter(tag => !tags.includes(tag))
-        .map(tag => addTag(tag));
-      
-      await Promise.all(tagPromises);
-      
-      // 移除 title 字段
+      // 构建保存数据
       const knowledgeData = {
-        content: message.content,
-        tags: finalTags,
-        category: finalCategory,
+        title: customTitle.trim(),
+        content: message?.content || '',
+        category: finalCategory || '技术',
+        tags: tagsString,
         source: 'chat'
       };
       
@@ -127,10 +188,55 @@ const KnowledgeSaveModal = ({ message, onSave, onClose }) => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [message, selectedCategory, inputTags, newCategory, showNewCategory, onSave, addCategory, addTag, tags, onClose]);
+  }, [
+    message, 
+    customTitle, 
+    selectedCategory, 
+    inputTags, 
+    newCategory, 
+    showNewCategory, 
+    onSave, 
+    addCategory, 
+    onClose
+  ]);
 
-  // ... 其他函数保持不变（handleAddCategory, handleKeyPress等）
+  // 4. 现在可以安全定义依赖 handleSave 的函数
+  const handleKeyPress = useCallback((e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSave();
+    } else if (e.key === 'Escape') {
+      onClose();
+    }
+  }, [handleSave, onClose]);
 
+  // 5. useEffect 放在最后
+  useEffect(() => {
+    if (message?.content) {
+      if (!customTitle) {
+        const generatedTitle = generateTitle(message.content);
+        setCustomTitle(generatedTitle || '新知识点');
+      }
+      
+      if (!inputTags) {
+        const suggestedTags = extractSmartTags(message.content);
+        if (suggestedTags && Array.isArray(suggestedTags) && suggestedTags.length > 0) {
+          setInputTags(suggestedTags.join(', '));
+        } else {
+          setInputTags('AI对话,帮助文档');
+        }
+      }
+    }
+  }, [message?.content, customTitle, inputTags, generateTitle, extractSmartTags]);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyPress);
+    return () => {
+      document.removeEventListener('keydown', handleKeyPress);
+    };
+  }, [handleKeyPress]);
+
+  // 渲染部分
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
@@ -155,7 +261,22 @@ const KnowledgeSaveModal = ({ message, onSave, onClose }) => {
             </div>
           )}
           
-          {/* 移除了标题输入框 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              标题 *
+            </label>
+            <input
+              type="text"
+              value={customTitle}
+              onChange={(e) => setCustomTitle(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              placeholder="请输入知识点标题"
+              maxLength={100}
+            />
+            <div className="text-xs text-gray-500 mt-1">
+              {customTitle?.length || 0}/100 字符
+            </div>
+          </div>
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -243,7 +364,7 @@ const KnowledgeSaveModal = ({ message, onSave, onClose }) => {
               内容预览
             </label>
             <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-600 max-h-32 overflow-y-auto border border-gray-200">
-              {message.content}
+              {message?.content || '无内容'}
             </div>
           </div>
         </div>
@@ -258,7 +379,7 @@ const KnowledgeSaveModal = ({ message, onSave, onClose }) => {
           </button>
           <button
             onClick={handleSave}
-            disabled={isSubmitting}
+            disabled={isSubmitting || !customTitle?.trim()}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center"
           >
             {isSubmitting && (

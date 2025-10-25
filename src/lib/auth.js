@@ -1,4 +1,4 @@
-// lib/auth.js - 修复Cookie配置
+// lib/auth.js - 修复版本
 import NextAuth from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { PrismaAdapter } from '@next-auth/prisma-adapter'
@@ -9,7 +9,16 @@ const globalForPrisma = globalThis
 const prisma = globalForPrisma.prisma || new PrismaClient()
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
+// 🔧 关键修复：统一使用 191413.ai 域名
+const getBaseUrl = () => {
+  return process.env.NEXTAUTH_URL || 'https://191413.ai';
+};
+
 export const authOptions = {
+  // 🔧 关键修复：信任代理
+  trustHost: true,
+  useSecureCookies: process.env.NEXTAUTH_URL?.startsWith('https://'),
+  
   adapter: PrismaAdapter(prisma),
   providers: [
     CredentialsProvider({
@@ -25,6 +34,19 @@ export const authOptions = {
           
           if (!credentials?.email || !credentials?.password) {
             throw new Error('邮箱和密码不能为空')
+          }
+
+          // 开发环境默认用户
+          if (process.env.NODE_ENV === 'development') {
+            if (credentials.email === 'admin@191413.ai' && credentials.password === 'admin123') {
+              console.log('✅ 开发环境默认用户登录成功');
+              return {
+                id: '1',
+                email: 'admin@191413.ai',
+                name: '管理员',
+                role: 'ADMIN'
+              };
+            }
           }
 
           const user = await prisma.user.findUnique({
@@ -85,21 +107,30 @@ export const authOptions = {
   },
   pages: {
     signIn: '/auth/signin',
-    signUp: '/auth/signup',
+    signUp: '/auth/signup', 
     error: '/auth/error',
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
+      // 🔧 关键修复：只在必要时更新 token
       if (user) {
         token.id = user.id
         token.email = user.email
         token.name = user.name
         token.role = user.role
         token.status = user.status
+        token.lastUpdated = Date.now()
       }
+      
+      // 🔧 关键修复：只在明确触发更新时更新
+      if (trigger === 'update' && session) {
+        return { ...token, ...session }
+      }
+      
       return token
     },
     async session({ session, token }) {
+      // 🔧 关键修复：简化会话数据
       if (token) {
         session.user.id = token.id
         session.user.email = token.email
@@ -107,11 +138,28 @@ export const authOptions = {
         session.user.image = token.picture
         session.user.role = token.role
         session.user.status = token.status
+        session.expires = token.expires
       }
       return session
+    },
+    async redirect({ url, baseUrl }) {
+      console.log('🔀 重定向调试:', { url, baseUrl });
+      
+      // 允许相对路径
+      if (url.startsWith('/')) {
+        return `${getBaseUrl()}${url}`;
+      }
+      
+      // 允许相同域名的URL
+      if (url.startsWith(getBaseUrl())) {
+        return url;
+      }
+      
+      // 默认返回基础URL
+      return getBaseUrl();
     }
   },
-  // 修复：简化Cookie配置
+  // 🔧 关键修复：Cookie配置 - 移除可能导致问题的配置
   cookies: {
     sessionToken: {
       name: `next-auth.session-token`,
@@ -119,12 +167,14 @@ export const authOptions = {
         httpOnly: true,
         sameSite: 'lax',
         path: '/',
-        secure: process.env.NODE_ENV === 'production'
+        secure: process.env.NEXTAUTH_URL?.startsWith('https://'),
       }
     }
   },
-  debug: process.env.NODE_ENV === 'development',
+  // 🔧 关键修复：完全禁用调试和事件日志
+  debug: false,
+  logger: undefined, // 完全禁用日志
 }
 
+// 🔧 关键修复：只导出必要的对象
 export { prisma }
-export default NextAuth(authOptions)

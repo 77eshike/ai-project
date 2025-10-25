@@ -2,17 +2,8 @@
 import { NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
-// 重要：修复matcher配置，确保包含所有需要保护的路由
 export const config = {
   matcher: [
-    /*
-     * 匹配所有路径除了：
-     * - api/auth (NextAuth API)
-     * - _next/static (静态文件)
-     * - _next/image (图片优化)
-     * - favicon.ico, sitemap.xml, robots.txt
-     * - 公开文件
-     */
     '/((?!api/auth|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
@@ -20,9 +11,9 @@ export const config = {
 export async function middleware(request) {
   const { pathname, origin } = request.nextUrl;
   
-  console.log('🛡️ 中间件处理:', {
+  console.log('🛡️ 中间件检查:', {
     pathname,
-    origin,
+    method: request.method,
     hasCookies: !!request.headers.get('cookie')
   });
 
@@ -30,12 +21,11 @@ export async function middleware(request) {
   const publicPaths = [
     '/',
     '/auth/signin',
-    '/auth/signup',
+    '/auth/signup', 
     '/auth/error',
     '/api/auth',
     '/api/public',
-    '/api/health',
-    '/api/diagnose'
+    '/api/health'
   ];
 
   const isPublicPath = publicPaths.some(path => 
@@ -43,33 +33,41 @@ export async function middleware(request) {
   );
 
   if (isPublicPath) {
-    console.log('🛡️ 公共路径，跳过认证');
+    console.log('✅ 公共路径，直接放行');
     return NextResponse.next();
   }
 
   // 保护需要认证的路由
-  if (pathname.startsWith('/dashboard') || 
-      pathname.startsWith('/chat') || 
-      pathname.startsWith('/api/ai/') ||
-      pathname.startsWith('/api/knowledge/')) {
-    
-    console.log('🔐 检查保护路由认证:', pathname);
+  const protectedPaths = [
+    '/dashboard',
+    '/chat', 
+    '/projects',
+    '/api/ai/',
+    '/api/knowledge/',
+    '/api/projects/'
+  ];
+
+  const isProtectedPath = protectedPaths.some(path => 
+    pathname.startsWith(path)
+  );
+
+  if (isProtectedPath) {
+    console.log('🔐 检查保护路径认证');
     
     try {
       const token = await getToken({ 
         req: request,
         secret: process.env.NEXTAUTH_SECRET,
-        secureCookie: process.env.NEXTAUTH_URL?.startsWith('https://')
+        secureCookie: true
       });
-      
+
       console.log('🔐 Token检查结果:', { 
         hasToken: !!token,
-        tokenUserId: token?.sub,
-        tokenEmail: token?.email
+        userId: token?.sub
       });
 
       if (!token) {
-        console.log('❌ 未认证用户访问保护路由:', pathname);
+        console.log('❌ 未认证用户访问保护路由');
         
         // 对于API请求，返回JSON错误
         if (pathname.startsWith('/api/')) {
@@ -77,50 +75,48 @@ export async function middleware(request) {
             JSON.stringify({ 
               success: false,
               error: '未经授权的访问',
-              code: 'UNAUTHORIZED',
-              sessionExpired: true 
+              code: 'UNAUTHORIZED'
             }),
             { 
               status: 401,
-              headers: { 
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': origin,
-                'Access-Control-Allow-Credentials': 'true'
-              }
+              headers: { 'Content-Type': 'application/json' }
             }
           );
         }
         
-        // 对于页面请求，重定向到登录页
-        const signInUrl = new URL('/auth/signin', origin);
-        signInUrl.searchParams.set('callbackUrl', request.url);
-        return NextResponse.redirect(signInUrl);
+        // 对于页面请求，重定向到登录页，但避免循环
+        // 检查当前是否已经在认证页面
+        if (!pathname.startsWith('/auth/')) {
+          const signInUrl = new URL('/auth/signin', origin);
+          console.log('🔀 重定向到登录页:', signInUrl.toString());
+          return NextResponse.redirect(signInUrl);
+        }
       }
       
-      console.log('✅ 认证通过，用户ID:', token.sub);
+      console.log('✅ 认证通过，放行请求');
       
     } catch (error) {
       console.error('❌ 中间件认证检查错误:', error);
       
-      if (pathname.startsWith('/api/')) {
-        return new NextResponse(
-          JSON.stringify({ 
-            success: false,
-            error: '认证检查失败',
-            code: 'AUTH_CHECK_ERROR'
-          }),
-          { 
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-          }
-        );
+      // 发生错误时，对于页面请求直接放行，避免循环
+      if (!pathname.startsWith('/api/')) {
+        console.log('⚠️ 认证检查出错，但放行页面请求');
+        return NextResponse.next();
       }
       
-      const signInUrl = new URL('/auth/signin', origin);
-      signInUrl.searchParams.set('error', 'AuthError');
-      return NextResponse.redirect(signInUrl);
+      return new NextResponse(
+        JSON.stringify({ 
+          success: false,
+          error: '认证检查失败'
+        }),
+        { 
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
     }
   }
   
+  console.log('✅ 非保护路径，放行请求');
   return NextResponse.next();
 }
