@@ -1,10 +1,10 @@
 // pages/api/ai/conversations/[id].js
 import { getServerSession } from 'next-auth/next'
-import { PrismaClient } from '@prisma/client'
+
 import { authOptions } from '../../../../lib/auth'
 
 const globalForPrisma = globalThis
-const prisma = globalForPrisma.prisma || new PrismaClient()
+const prisma = globalForPrisma.prisma || prisma
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
 export default async function handler(req, res) {

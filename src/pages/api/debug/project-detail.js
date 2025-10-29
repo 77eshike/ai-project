@@ -1,7 +1,5 @@
 // pages/api/debug/project-detail.js
 import { authOptions } from '../../../lib/auth' // 🔧 从 lib 导入
-import prisma from '../../../lib/prisma';
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', 'https://localhost:3001');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');

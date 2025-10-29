@@ -1,15 +1,9 @@
-// pages/api/ai/chat.js - 语音识别优化版本 + 指令识别集成
+// pages/api/ai/chat.js - 修复导入版本
 import { getCurrentUser } from '../../../lib/session';
-import Prisma from '../../../lib/prisma';
+import { getPrisma } from '../../../lib/prisma';
 import { AI_MODES } from '../../../lib/ai-modes';
-import { CommandProcessor } from '../../../lib/command-processor';
-
-const globalForPrisma = globalThis;
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
-
-// 缓存OpenAI客户端实例
-let openaiClient = null;
+// 修复导入：使用默认导入而不是命名导入
+import CommandProcessor from '../../../lib/command-processor';
 
 export default async function handler(req, res) {
   console.log('🔐 AI聊天API - 开始处理请求', {
@@ -98,6 +92,9 @@ export default async function handler(req, res) {
       });
     }
 
+    // 获取 Prisma 客户端
+    const prisma = await getPrisma();
+
     // 构建消息历史
     let messages = [];
     let existingConversation = null;
@@ -109,6 +106,14 @@ export default async function handler(req, res) {
           where: { 
             id: conversationId,
             userId: userId
+          },
+          include: {
+            messages: {
+              orderBy: {
+                createdAt: 'asc'
+              },
+              take: 20 // 只取最近20条消息
+            }
           }
         });
         
@@ -120,10 +125,13 @@ export default async function handler(req, res) {
           });
         }
         
-        // 获取最近的消息（最多20条）
-        const recentMessages = existingConversation.messages.slice(-20);
-        messages = recentMessages;
-        console.log(`📚 加载了 ${recentMessages.length} 条历史消息`);
+        // 转换消息格式
+        messages = existingConversation.messages.map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }));
+        
+        console.log(`📚 加载了 ${messages.length} 条历史消息`);
       } catch (dbError) {
         console.error('❌ 数据库查询错误:', dbError);
         // 如果数据库查询失败，继续创建新对话
@@ -136,16 +144,34 @@ export default async function handler(req, res) {
     const userMessage = { role: 'user', content: message.trim() };
     messages.push(userMessage);
 
-    // === 新增：指令识别和处理 ===
-    const commandProcessor = new CommandProcessor();
-    const commandContext = {
-      userId: userId,
-      conversationId: conversationId,
-      conversationHistory: messages,
-      mode: mode
-    };
+    // === 修复：指令识别和处理 ===
+    let commandResult = null;
+    try {
+      // 使用动态导入来避免构建时的问题
+      let CommandProcessorClass = CommandProcessor;
+      
+      // 如果静态导入失败，尝试动态导入
+      if (typeof CommandProcessor === 'undefined') {
+        console.log('🔄 尝试动态导入 CommandProcessor...');
+        const module = await import('../../../lib/command-processor');
+        CommandProcessorClass = module.default || module.CommandProcessor;
+      }
+      
+      if (CommandProcessorClass) {
+        const commandProcessor = new CommandProcessorClass();
+        const commandContext = {
+          userId: userId,
+          conversationId: conversationId,
+          conversationHistory: messages,
+          mode: mode,
+          voiceEnabled: voiceEnabled
+        };
 
-    const commandResult = await commandProcessor.processMessage(message, commandContext);
+        commandResult = await commandProcessor.processMessage(message, commandContext);
+      }
+    } catch (commandError) {
+      console.log('⚠️ 指令处理器不可用，继续正常对话:', commandError.message);
+    }
     
     if (commandResult) {
       console.log('🎯 指令识别成功:', commandResult.command);
@@ -162,21 +188,40 @@ export default async function handler(req, res) {
       let updatedConversation;
       try {
         if (existingConversation) {
+          // 保存新消息到数据库
+          await prisma.message.create({
+            data: {
+              conversationId: existingConversation.id,
+              role: 'user',
+              content: message.trim(),
+              userId: userId
+            }
+          });
+          
+          await prisma.message.create({
+            data: {
+              conversationId: existingConversation.id,
+              role: 'assistant',
+              content: commandResult.message,
+              userId: userId,
+              metadata: {
+                isCommand: true,
+                commandData: commandResult
+              }
+            }
+          });
+
           updatedConversation = await prisma.conversation.update({
             where: { 
               id: conversationId,
               userId: userId
             },
             data: {
-              messages: {
-                push: [userMessage, assistantMessage]
-              },
               updatedAt: new Date(),
               metadata: {
                 ...(existingConversation.metadata || {}),
                 lastMode: mode,
-                voiceEnabled: voiceEnabled,
-                messageCount: (existingConversation.messages.length + 2)
+                voiceEnabled: voiceEnabled
               }
             }
           });
@@ -190,11 +235,27 @@ export default async function handler(req, res) {
             data: {
               userId: userId,
               title: title,
-              messages: [userMessage, assistantMessage],
               metadata: {
                 initialMode: mode,
-                voiceEnabled: voiceEnabled,
-                messageCount: 2
+                voiceEnabled: voiceEnabled
+              },
+              messages: {
+                create: [
+                  {
+                    role: 'user',
+                    content: message.trim(),
+                    userId: userId
+                  },
+                  {
+                    role: 'assistant',
+                    content: commandResult.message,
+                    userId: userId,
+                    metadata: {
+                      isCommand: true,
+                      commandData: commandResult
+                    }
+                  }
+                ]
               }
             }
           });
@@ -227,26 +288,41 @@ export default async function handler(req, res) {
 
     // 保存到数据库
     let updatedConversation;
-    const assistantMessage = { role: 'assistant', content: aiResponse };
 
     try {
       if (existingConversation) {
         console.log('💾 更新现有对话');
+        
+        // 保存新消息到数据库
+        await prisma.message.create({
+          data: {
+            conversationId: existingConversation.id,
+            role: 'user',
+            content: message.trim(),
+            userId: userId
+          }
+        });
+        
+        await prisma.message.create({
+          data: {
+            conversationId: existingConversation.id,
+            role: 'assistant',
+            content: aiResponse,
+            userId: userId
+          }
+        });
+
         updatedConversation = await prisma.conversation.update({
           where: { 
             id: conversationId,
             userId: userId
           },
           data: {
-            messages: {
-              push: [userMessage, assistantMessage]
-            },
             updatedAt: new Date(),
             metadata: {
               ...(existingConversation.metadata || {}),
               lastMode: mode,
-              voiceEnabled: voiceEnabled,
-              messageCount: (existingConversation.messages.length + 2)
+              voiceEnabled: voiceEnabled
             }
           }
         });
@@ -260,11 +336,23 @@ export default async function handler(req, res) {
           data: {
             userId: userId,
             title: title,
-            messages: [userMessage, assistantMessage],
             metadata: {
               initialMode: mode,
-              voiceEnabled: voiceEnabled,
-              messageCount: 2
+              voiceEnabled: voiceEnabled
+            },
+            messages: {
+              create: [
+                {
+                  role: 'user',
+                  content: message.trim(),
+                  userId: userId
+                },
+                {
+                  role: 'assistant',
+                  content: aiResponse,
+                  userId: userId
+                }
+              ]
             }
           }
         });
@@ -423,22 +511,5 @@ async function callDeepSeekAI(messages, mode) {
     } else {
       throw new Error(`AI服务错误: ${error.message}`);
     }
-  }
-}
-
-// 健康检查端点
-export async function healthCheck() {
-  try {
-    // 检查数据库连接
-    await prisma.$queryRaw`SELECT 1`;
-    
-    // 检查环境变量
-    if (!process.env.OPENAI_API_KEY) {
-      return { healthy: false, error: 'OPENAI_API_KEY未配置' };
-    }
-    
-    return { healthy: true, timestamp: new Date().toISOString() };
-  } catch (error) {
-    return { healthy: false, error: error.message };
   }
 }

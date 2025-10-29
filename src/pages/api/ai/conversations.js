@@ -1,10 +1,10 @@
 // pages/api/ai/conversations.js
 import { getServerSession } from 'next-auth/next'
-import { PrismaClient } from '@prisma/client'
+
 import { authOptions } from '../../../lib/auth'
 
 const globalForPrisma = globalThis
-const prisma = globalForPrisma.prisma || new PrismaClient()
+const prisma = globalForPrisma.prisma || prisma
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
 // 配置常量

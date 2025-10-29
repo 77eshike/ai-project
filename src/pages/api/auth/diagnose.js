@@ -1,8 +1,6 @@
 // src/pages/api/auth/diagnose.js - 使用正确路径
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from './[...nextauth]';
-import prisma from '../../../lib/prisma'; // 🔧 修复：正确的相对路径
-
+import { authOptions } from '../../../lib/auth';
 export default async function handler(req, res) {
   console.log('🩺 综合会话诊断API被调用');
   

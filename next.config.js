@@ -1,8 +1,5 @@
-// next.config.js - Next.js 15.5.6 兼容版本
 /** @type {import('next').NextConfig} */
-
 const nextConfig = {
-  // 基础配置
   reactStrictMode: false,
   poweredByHeader: false,
   generateEtags: false,
@@ -51,12 +48,40 @@ const nextConfig = {
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
   
-  // 环境变量增强
-  env: {
-    BUILD_VERSION: new Date().toISOString(),
-    BUILD_TIME: new Date().toISOString(),
-    APP_ENV: process.env.NODE_ENV || 'development',
-    APP_NAME: '191413AI平台',
+  // 安全头配置
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=()',
+          },
+        ],
+      },
+      {
+        source: '/api/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=0, must-revalidate',
+          },
+        ],
+      },
+    ];
   },
   
   // Webpack 配置优化
@@ -66,30 +91,23 @@ const nextConfig = {
       new webpack.DefinePlugin({
         'process.env.BUILD_TIMESTAMP': JSON.stringify(Date.now()),
         'process.env.NEXT_PUBLIC_APP_URL': JSON.stringify(process.env.NEXTAUTH_URL || 'http://43.228.124.126'),
+        'process.env.OPENAI_API_KEY': JSON.stringify(process.env.OPENAI_API_KEY || ''),
+        'process.env.NEXTAUTH_SECRET': JSON.stringify(process.env.NEXTAUTH_SECRET || ''),
       })
     );
 
-    // 开发环境特定配置
-    if (dev) {
-      // 忽略开发环境警告
-      config.ignoreWarnings = [
-        { module: /middleware/ },
-        { module: /_devMiddlewareManifest/ },
-        { module: /_devPagesManifest/ },
-        { file: /node_modules\/@next\/react-dev-overlay/ },
-        { message: /Module not found/ },
-        { message: /Can't resolve/ },
-      ];
+    // 生产环境检查必需变量
+    if (!dev && isServer) {
+      const requiredEnvVars = ['OPENAI_API_KEY', 'NEXTAUTH_SECRET', 'DATABASE_URL'];
+      const missing = requiredEnvVars.filter(varName => !process.env[varName]);
+      if (missing.length > 0) {
+        throw new Error(`缺少必需环境变量: ${missing.join(', ')}`);
+      }
     }
 
     // 模块解析优化
     config.resolve = {
       ...config.resolve,
-      alias: {
-        ...config.resolve.alias,
-        'react-native$': 'react-native-web',
-      },
-      extensions: ['.js', '.jsx', '.ts', '.tsx', '.json', '.md', '.mdx'],
       fallback: {
         ...config.resolve.fallback,
         fs: false,
@@ -100,15 +118,9 @@ const nextConfig = {
       }
     };
 
-    // 处理 Prisma 客户端
-    if (isServer) {
-      config.externals.push('@prisma/client');
-    }
-
     return config;
   },
   
-  // ESLint 和 TypeScript 配置
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -117,120 +129,16 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   
-  // 编译器配置优化
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? {
       exclude: ['error', 'warn'],
     } : false,
   },
   
-  // 🔧 关键修复：CORS 配置支持反向代理
-  async headers() {
-    const securityHeaders = [
-      {
-        key: 'X-Frame-Options',
-        value: 'DENY',
-      },
-      {
-        key: 'X-Content-Type-Options',
-        value: 'nosniff',
-      },
-      {
-        key: 'Referrer-Policy',
-        value: 'strict-origin-when-cross-origin',
-      },
-      {
-        key: 'X-XSS-Protection',
-        value: '1; mode=block',
-      },
-    ];
-    
-    return [
-      {
-        source: '/(.*)',
-        headers: securityHeaders,
-      },
-      {
-        source: '/api/:path*',
-        headers: [
-          {
-            key: 'Access-Control-Allow-Origin',
-            value: process.env.NODE_ENV === 'development' 
-              ? 'http://localhost:3001' 
-              : 'http://43.228.124.126'
-          },
-          {
-            key: 'Access-Control-Allow-Methods',
-            value: 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH'
-          },
-          {
-            key: 'Access-Control-Allow-Headers',
-            value: 'Content-Type, Authorization, X-Requested-With, Accept, Cookie'
-          },
-          {
-            key: 'Access-Control-Allow-Credentials',
-            value: 'true'
-          },
-          {
-            key: 'Access-Control-Max-Age',
-            value: '86400'
-          },
-        ],
-      },
-      // NextAuth 特定路由
-      {
-        source: '/api/auth/:path*',
-        headers: [
-          {
-            key: 'Access-Control-Allow-Origin',
-            value: process.env.NODE_ENV === 'development' 
-              ? 'http://localhost:3001' 
-              : 'http://43.228.124.126'
-          },
-          {
-            key: 'Access-Control-Allow-Methods',
-            value: 'GET, POST, PUT, DELETE, OPTIONS'
-          },
-          {
-            key: 'Access-Control-Allow-Headers',
-            value: 'Content-Type, Authorization, Cookie'
-          },
-          {
-            key: 'Access-Control-Allow-Credentials',
-            value: 'true'
-          },
-        ],
-      },
-    ];
-  },
-  
-  // 重定向配置
-  async redirects() {
-    return [
-      {
-        source: '/.env',
-        destination: '/404',
-        permanent: false,
-      },
-      {
-        source: '/.git',
-        destination: '/404',
-        permanent: false,
-      },
-    ];
-  },
-  
-  // 输出配置
-  trailingSlash: false,
-  cleanDistDir: true,
-  
-  // 实验性配置
+  // 实验性功能
   experimental: {
-    optimizeCss: process.env.NODE_ENV === 'production',
-  },
+    optimizeCss: true,
+  }
+}
 
-  // 外部包配置
-  serverExternalPackages: ['@prisma/client', 'bcryptjs'],
-};
-
-module.exports = nextConfig;
+module.exports = nextConfig

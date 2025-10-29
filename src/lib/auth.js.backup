@@ -1,0 +1,156 @@
+// src/lib/auth.js - 修复登录逻辑
+import NextAuth from 'next-auth'
+import CredentialsProvider from 'next-auth/providers/credentials'
+import { PrismaAdapter } from '@next-auth/prisma-adapter'
+import { prisma } from './prisma'
+import bcrypt from 'bcryptjs'
+
+export const authOptions = {
+  debug: process.env.NODE_ENV === 'development',
+  trustHost: true,
+  secret: process.env.NEXTAUTH_SECRET,
+  
+  adapter: PrismaAdapter(prisma),
+  
+  providers: [
+    CredentialsProvider({
+      id: 'credentials',
+      name: 'credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' }
+      },
+      async authorize(credentials) {
+        console.log('🔐 AUTHORIZE被调用:', {
+          email: credentials?.email,
+          hasPassword: !!credentials?.password
+        })
+        
+        if (!credentials?.email || !credentials?.password) {
+          console.log('❌ 邮箱或密码为空')
+          throw new Error('邮箱和密码不能为空')
+        }
+
+        try {
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email.toLowerCase() },
+            select: {
+              id: true,
+              email: true,
+              password: true,
+              name: true,
+              role: true,
+              status: true
+            }
+          })
+
+          console.log('🔍 数据库查询结果:', user ? `找到用户 ${user.email}` : '用户不存在')
+
+          if (!user) {
+            throw new Error('邮箱或密码错误')
+          }
+
+          if (!user.password) {
+            throw new Error('该账户未设置密码')
+          }
+
+          console.log('🔑 开始密码验证...')
+          const isValid = await bcrypt.compare(credentials.password, user.password)
+          console.log('🔑 密码验证结果:', isValid)
+
+          if (!isValid) {
+            throw new Error('邮箱或密码错误')
+          }
+
+          if (user.status !== 'ACTIVE') {
+            throw new Error('账户状态异常')
+          }
+
+          console.log('✅ 认证成功，返回用户信息')
+          
+          return {
+            id: user.id.toString(),
+            email: user.email,
+            name: user.name,
+            role: user.role,
+          }
+        } catch (error) {
+          console.error('❌ AUTHORIZE错误:', error)
+          throw error
+        }
+      }
+    })
+  ],
+
+  session: {
+    strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60,
+  },
+
+  pages: {
+    signIn: '/auth/signin',
+    signUp: '/auth/signup', 
+    error: '/auth/error',
+  },
+
+  callbacks: {
+    async signIn({ user, account, profile, email, credentials }) {
+      console.log('🔐 signIn回调:', { 
+        user: user?.email, 
+        account: account?.type,
+        hasCredentials: !!credentials 
+      })
+      return true
+    },
+
+    async jwt({ token, user, trigger, session }) {
+      console.log('🔐 JWT回调:', { 
+        user: user?.email, 
+        trigger,
+        tokenEmail: token?.email 
+      })
+      
+      if (user) {
+        token.id = user.id
+        token.role = user.role
+        console.log('🔐 JWT: 添加用户数据', { id: user.id, email: user.email })
+      }
+      
+      // 处理会话更新
+      if (trigger === "update" && session) {
+        token = { ...token, ...session }
+      }
+      
+      return token
+    },
+
+    async session({ session, token }) {
+      console.log('🔐 SESSION回调:', { 
+        tokenId: token?.id,
+        sessionUser: session?.user?.email 
+      })
+      
+      if (token) {
+        session.user.id = token.id
+        session.user.role = token.role
+        console.log('🔐 SESSION: 设置会话数据', { id: token.id })
+      }
+      return session
+    },
+
+    async redirect({ url, baseUrl }) {
+      console.log('🔀 REDIRECT回调:', { url, baseUrl })
+      
+      // 允许相对URL
+      if (url.startsWith('/')) {
+        return `${baseUrl}${url}`
+      }
+      // 允许相同域的URL
+      else if (new URL(url).origin === baseUrl) {
+        return url
+      }
+      // 默认返回baseUrl
+      return baseUrl
+    }
+  }
+}

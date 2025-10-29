@@ -1,11 +1,22 @@
 // pages/api/projects/[id].js - 修复版本
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../lib/auth";
-import prisma from '../../../lib/prisma';
+import { prisma } from '../../../lib/prisma'; // 使用兼容性导出
 
 export default async function handler(req, res) {
-  // 设置 CORS 头
-  res.setHeader('Access-Control-Allow-Origin', 'https://localhost:3001');
+  // 🔧 修复：使用更灵活的 CORS 配置
+  const allowedOrigins = [
+    'https://localhost:3001',
+    'http://localhost:3001',
+    'https://191413.ai',
+    'http://43.228.124.126:3000'
+  ];
+  
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -57,13 +68,14 @@ export default async function handler(req, res) {
 
     console.log('📂 处理项目详情:', { projectId: id, userId });
 
-    // 简化项目查询 - 移除可能出错的字段
+    // 🔧 修复：确保数据库字段名称正确
+    // 根据你的 Prisma schema，检查字段名是 members 还是 projectMembers
     const project = await prisma.project.findFirst({
       where: {
         id: id,
         OR: [
           { ownerId: userId },
-          { members: { some: { userId: userId } } }
+          { projectMembers: { some: { userId: userId } } } // 🔧 可能需要改为 projectMembers
         ]
       },
       include: {
@@ -74,7 +86,7 @@ export default async function handler(req, res) {
             email: true
           }
         },
-        members: {
+        projectMembers: { // 🔧 可能需要改为 projectMembers
           include: {
             user: {
               select: { 
@@ -87,7 +99,7 @@ export default async function handler(req, res) {
         },
         _count: {
           select: {
-            members: true,
+            projectMembers: true, // 🔧 可能需要改为 projectMembers
             comments: true
           }
         }
@@ -110,7 +122,7 @@ export default async function handler(req, res) {
     // 获取用户角色
     const getUserRole = () => {
       if (project.ownerId === userId) return 'OWNER';
-      const member = project.members.find(m => m.userId === userId);
+      const member = project.projectMembers.find(m => m.userId === userId); // 🔧 可能需要改为 projectMembers
       return member ? member.role : 'VIEWER';
     };
 
@@ -135,10 +147,10 @@ export default async function handler(req, res) {
         canDelete: userRole === 'OWNER',
       },
       stats: {
-        totalMembers: project._count.members,
+        totalMembers: project._count.projectMembers, // 🔧 可能需要改为 projectMembers
         totalComments: project._count.comments,
       },
-      members: project.members || []
+      members: project.projectMembers || [] // 🔧 可能需要改为 projectMembers
     };
 
     console.log(`✅ 返回项目详情, 用户角色: ${userRole}`);

@@ -1,44 +1,47 @@
-// src/pages/upload/index.js - 修复版本
-import { useState } from 'react'
-import { getServerSession } from 'next-auth/next'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/router'
 
-// 🔧 修复：使用正确的相对路径导入 authOptions
-let authOptions;
-
-try {
-  // 尝试从 lib 目录导入
-  authOptions = require('../../lib/auth').authOptions;
-} catch (error) {
-  try {
-    // 尝试从 api/auth 导入
-    authOptions = require('../api/auth/[...nextauth]').authOptions;
-  } catch (error2) {
-    try {
-      // 尝试从 src/lib 导入
-      authOptions = require('../../../src/lib/auth').authOptions;
-    } catch (error3) {
-      console.error('❌ 无法导入 authOptions:', error3);
-      // 创建临时配置
-      authOptions = {
-        secret: process.env.NEXTAUTH_SECRET,
-        providers: [],
-        session: { strategy: 'jwt' }
-      };
-    }
-  }
-}
-
-export default function Upload({ user }) {
+export default function UploadPage() {
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [file, setFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState('')
+  const router = useRouter()
+
+  useEffect(() => {
+    checkAuth()
+  }, [])
+
+  const checkAuth = async () => {
+    try {
+      const res = await fetch('/api/simple-auth/session')
+      const data = await res.json()
+      
+      if (data.authenticated) {
+        setUser(data.user)
+      } else {
+        router.push('/auth/signin?callbackUrl=/upload')
+      }
+    } catch (error) {
+      console.error('认证检查失败:', error)
+      router.push('/auth/signin?callbackUrl=/upload')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0])
+    setMessage('')
   }
 
-  const handleUpload = async () => {
-    if (!file) return
+  const handleUpload = async (e) => {
+    e.preventDefault()
+    if (!file) {
+      setMessage('请选择文件')
+      return
+    }
 
     setUploading(true)
     setMessage('')
@@ -47,122 +50,130 @@ export default function Upload({ user }) {
     formData.append('file', file)
 
     try {
-      const response = await fetch('/api/upload', {
+      const res = await fetch('/api/upload', {
         method: 'POST',
-        body: formData
+        body: formData,
       })
 
-      const data = await response.json()
-      if (response.ok) {
-        setMessage('文件上传成功!')
+      const data = await res.json()
+
+      if (res.ok) {
+        setMessage('文件上传成功！')
         setFile(null)
-        // 清空文件输入
-        document.querySelector('input[type="file"]').value = '';
+        e.target.reset()
       } else {
-        throw new Error(data.error || '上传失败')
+        setMessage(data.error || '上传失败')
       }
     } catch (error) {
-      setMessage('上传失败: ' + error.message)
+      console.error('上传错误:', error)
+      setMessage('上传失败，请重试')
     } finally {
       setUploading(false)
     }
   }
 
+  if (loading) {
+    return (
+      <div style={{ padding: '20px', textAlign: 'center' }}>
+        <div>加载中...</div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div style={{ padding: '20px', textAlign: 'center' }}>
+        <div>未授权，正在跳转...</div>
+      </div>
+    )
+  }
+
   return (
-    <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
-      <h1>文件上传</h1>
-      <p>欢迎, {user?.name || user?.email}!</p>
-      
-      <div style={{ marginBottom: '1rem' }}>
-        <input
-          type="file"
-          onChange={handleFileChange}
-          disabled={uploading}
-          style={{ 
-            padding: '0.5rem',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            width: '100%'
-          }}
-        />
-      </div>
-      
-      <div>
-        <button 
-          onClick={handleUpload} 
-          disabled={!file || uploading}
-          style={{ 
-            marginTop: '1rem', 
-            padding: '0.75rem 1.5rem',
-            backgroundColor: (!file || uploading) ? '#ccc' : '#0070f3',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: (!file || uploading) ? 'not-allowed' : 'pointer',
-            fontSize: '16px'
-          }}
-        >
-          {uploading ? '上传中...' : '上传文件'}
-        </button>
-      </div>
-      
-      {message && (
-        <div style={{ 
-          marginTop: '1rem', 
-          padding: '0.75rem',
-          color: message.includes('失败') ? '#d32f2f' : '#2e7d32',
-          backgroundColor: message.includes('失败') ? '#ffebee' : '#e8f5e8',
-          border: `1px solid ${message.includes('失败') ? '#f44336' : '#4caf50'}`,
-          borderRadius: '4px'
-        }}>
-          {message}
+    <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        marginBottom: '30px'
+      }}>
+        <h1>文件上传</h1>
+        <div>
+          <span>欢迎, {user.name} </span>
+          <button 
+            onClick={() => router.push('/dashboard')}
+            style={{
+              marginLeft: '10px',
+              padding: '5px 10px',
+              backgroundColor: '#666',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            返回控制面板
+          </button>
         </div>
-      )}
-      
-      <div style={{ marginTop: '2rem', fontSize: '14px', color: '#666' }}>
-        <p>支持的文件类型: 图片, 文档, PDF等</p>
-        <p>最大文件大小: 10MB</p>
+      </div>
+
+      <div style={{
+        padding: '30px',
+        border: '2px dashed #ddd',
+        borderRadius: '8px',
+        textAlign: 'center',
+        backgroundColor: '#fafafa'
+      }}>
+        <form onSubmit={handleUpload}>
+          <div style={{ marginBottom: '20px' }}>
+            <input
+              type="file"
+              onChange={handleFileChange}
+              disabled={uploading}
+              style={{
+                margin: '10px 0'
+              }}
+            />
+          </div>
+          
+          <button
+            type="submit"
+            disabled={uploading || !file}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: uploading || !file ? '#ccc' : '#0070f3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: uploading || !file ? 'not-allowed' : 'pointer',
+              fontSize: '16px'
+            }}
+          >
+            {uploading ? '上传中...' : '上传文件'}
+          </button>
+        </form>
+
+        {message && (
+          <div style={{ 
+            marginTop: '20px',
+            padding: '10px',
+            backgroundColor: message.includes('成功') ? '#e6ffe6' : '#ffe6e6',
+            border: `1px solid ${message.includes('成功') ? '#00cc00' : '#ff4444'}`,
+            borderRadius: '4px',
+            color: message.includes('成功') ? '#006600' : '#cc0000'
+          }}>
+            {message}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: '30px' }}>
+        <h3>上传说明</h3>
+        <ul>
+          <li>支持各种文件格式上传</li>
+          <li>文件大小限制: 10MB</li>
+          <li>上传后文件将存储在安全位置</li>
+        </ul>
       </div>
     </div>
   )
-}
-
-export async function getServerSideProps(context) {
-  try {
-    const session = await getServerSession(context.req, context.res, authOptions)
-
-    console.log('🔍 上传页面会话检查:', {
-      hasSession: !!session,
-      userId: session?.user?.id
-    });
-
-    if (!session) {
-      console.log('❌ 上传页面未认证，重定向到登录页');
-      return {
-        redirect: {
-          destination: '/auth/signin',
-          permanent: false
-        }
-      }
-    }
-
-    return {
-      props: {
-        user: {
-          id: session.user.id,
-          email: session.user.email,
-          name: session.user.name
-        }
-      }
-    }
-  } catch (error) {
-    console.error('❌ 上传页面服务器端错误:', error);
-    
-    return {
-      redirect: {
-        destination: '/auth/signin?error=AuthError',
-        permanent: false
-      }
-    }
-  }
 }

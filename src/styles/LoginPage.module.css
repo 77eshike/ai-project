@@ -1,7 +1,33 @@
+/* styles/LoginPage.module.css - 修复版本 */
+/* 使用类来定义CSS变量，避免:root选择器在CSS Modules中的问题 */
+
+/* 主容器类定义变量 */
+.loginContainer {
+  --primary-gradient: linear-gradient(135deg, #6e8efb, #a777e3);
+  --secondary-gradient: linear-gradient(135deg, #4a6cf7, #7b53c1);
+  --success-color: #10b981;
+  --error-color: #ef4444;
+  --warning-color: #f59e0b;
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --text-light: #9ca3af;
+  --bg-white: #ffffff;
+  --bg-gray: #f9fafb;
+  --border-color: #e5e7eb;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --transition: all 0.2s ease-in-out;
+}
+
 .container {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background: var(--bg-gray, #f9fafb);
 }
 
 .main {
@@ -17,16 +43,18 @@
   align-items: center;
   justify-content: center;
   height: 100vh;
+  background: var(--secondary-gradient, linear-gradient(135deg, #4a6cf7, #7b53c1));
+  color: white;
 }
 
 .spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #6e8efb;
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top: 3px solid white;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin-bottom: 16px;
+  margin-bottom: 1rem;
 }
 
 @keyframes spin {
@@ -42,34 +70,88 @@
   text-align: center;
 }
 
-.userInfo {
-  background: white;
-  border-radius: 10px;
-  padding: 2rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+.welcomeCard {
+  background: var(--bg-white, #ffffff);
+  border-radius: var(--radius-lg, 12px);
+  padding: 3rem 2rem;
+  box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.1));
   margin-top: 2rem;
 }
 
-.actionLinks {
-  display: flex;
-  justify-content: center;
+.welcomeIcon {
+  font-size: 4rem;
+  color: var(--success-color, #10b981);
+  margin-bottom: 1.5rem;
+}
+
+.userInfo {
+  margin: 2rem 0;
+}
+
+.userInfo p {
+  font-size: 1.125rem;
+  margin: 0.5rem 0;
+  color: var(--text-primary, #1f2937);
+}
+
+.userEmail {
+  color: var(--text-secondary, #6b7280) !important;
+  font-size: 1rem !important;
+}
+
+.actionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1rem;
-  margin-top: 1.5rem;
-  flex-wrap: wrap;
+  margin-top: 2rem;
 }
 
-.linkButton {
-  background: linear-gradient(135deg, #6e8efb, #a777e3);
-  color: white;
-  padding: 10px 20px;
-  border-radius: 5px;
+.primaryButton, .secondaryButton, .logoutButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  border-radius: var(--radius-md, 8px);
   text-decoration: none;
-  transition: transform 0.2s;
-  display: inline-block;
+  font-weight: 500;
+  transition: var(--transition, all 0.2s ease-in-out);
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
 }
 
-.linkButton:hover {
+.primaryButton {
+  background: var(--primary-gradient, linear-gradient(135deg, #6e8efb, #a777e3));
+  color: white;
+  box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
+}
+
+.primaryButton:hover {
   transform: translateY(-2px);
+  box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.1));
+}
+
+.secondaryButton {
+  background: var(--bg-white, #ffffff);
+  color: var(--text-primary, #1f2937);
+  border: 1px solid var(--border-color, #e5e7eb);
+}
+
+.secondaryButton:hover {
+  border-color: var(--primary-color, #6e8efb);
+  transform: translateY(-1px);
+}
+
+.logoutButton {
+  background: #fef2f2;
+  color: var(--error-color, #ef4444);
+  border: 1px solid #fecaca;
+}
+
+.logoutButton:hover {
+  background: #fee2e2;
+  transform: translateY(-1px);
 }
 
 /* 登录容器样式 */
@@ -81,103 +163,167 @@
 
 .leftPanel {
   flex: 1;
-  background: linear-gradient(135deg, #4a6cf7, #7b53c1);
+  background: var(--secondary-gradient, linear-gradient(135deg, #4a6cf7, #7b53c1));
   color: white;
-  padding: 50px 40px;
+  padding: 3rem 2.5rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.leftPanel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+.brand {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 3rem;
 }
 
 .logo {
-  font-size: 28px;
+  font-size: 2.5rem;
   font-weight: 700;
-  margin-bottom: 20px;
+  margin-bottom: 1rem;
   display: flex;
   align-items: center;
+  gap: 0.75rem;
 }
 
 .logo i {
-  margin-right: 10px;
-  font-size: 32px;
+  font-size: 3rem;
+  background: var(--primary-gradient, linear-gradient(135deg, #6e8efb, #a777e3));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-.welcomeText {
-  margin-bottom: 30px;
+.heroText {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 3rem;
 }
 
-.welcomeText h1 {
-  font-size: 32px;
-  margin-bottom: 10px;
+.heroText h2 {
+  font-size: 2.25rem;
+  margin-bottom: 1rem;
+  font-weight: 700;
 }
 
-.welcomeText p {
+.heroText p {
   color: rgba(255, 255, 255, 0.9);
   line-height: 1.6;
+  font-size: 1.125rem;
 }
 
 .features {
-  list-style: none;
-  margin: 30px 0 40px 0;
+  position: relative;
+  z-index: 1;
+  margin: 0;
   padding: 0;
+  list-style: none;
 }
 
-.features li {
-  margin-bottom: 15px;
+.feature {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border-radius: var(--radius-md, 8px);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  transition: var(--transition, all 0.2s ease-in-out);
 }
 
-.features i {
-  margin-right: 10px;
+.feature:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateX(8px);
+}
+
+.feature i {
+  font-size: 1.5rem;
   color: #a6ffcb;
-  font-size: 18px;
-  width: 20px;
+  margin-top: 0.25rem;
+  flex-shrink: 0;
 }
 
-.divider {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.3);
-  margin: 25px 0;
+.feature h4 {
+  margin: 0 0 0.25rem 0;
+  font-weight: 600;
+}
+
+.feature p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.875rem;
 }
 
 .rightPanel {
   flex: 1;
-  padding: 50px 40px;
+  padding: 3rem 2.5rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  background: white;
+  background: var(--bg-white, #ffffff);
+}
+
+.loginCard {
+  max-width: 400px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .loginHeader {
-  margin-bottom: 30px;
+  margin-bottom: 2rem;
   text-align: center;
 }
 
 .loginHeader h2 {
-  font-size: 28px;
-  color: #333;
-  font-weight: 600;
-  margin-bottom: 10px;
+  font-size: 2rem;
+  color: var(--text-primary, #1f2937);
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.loginHeader p {
+  color: var(--text-secondary, #6b7280);
+  margin: 0;
 }
 
 /* 错误消息样式 */
 .errorMessage {
-  background-color: #fee;
-  border: 1px solid #fcc;
-  color: #c33;
-  padding: 12px 16px;
-  border-radius: 8px;
-  margin-bottom: 20px;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: var(--error-color, #ef4444);
+  padding: 1rem;
+  border-radius: var(--radius-md, 8px);
+  margin-bottom: 1.5rem;
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 14px;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  animation: slideDown 0.3s ease;
 }
 
-.errorMessage i {
-  font-size: 16px;
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .loginForm {
@@ -185,15 +331,15 @@
 }
 
 .formGroup {
-  margin-bottom: 20px;
+  margin-bottom: 1.5rem;
 }
 
 .formGroup label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 0.5rem;
   font-weight: 500;
-  color: #444;
-  font-size: 14px;
+  color: var(--text-primary, #1f2937);
+  font-size: 0.875rem;
 }
 
 .inputWithIcon {
@@ -202,94 +348,97 @@
 
 .inputWithIcon i {
   position: absolute;
-  left: 15px;
+  left: 1rem;
   top: 50%;
   transform: translateY(-50%);
-  color: #777;
+  color: var(--text-light, #9ca3af);
   z-index: 1;
 }
 
 .inputWithIcon input {
   width: 100%;
-  padding: 15px 15px 15px 45px;
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  font-size: 16px;
-  transition: all 0.3s;
-  background-color: #fafafa;
-  /* 确保输入框文字颜色为黑色 */
-  color: #000;
+  padding: 1rem 1rem 1rem 3rem;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: var(--radius-md, 8px);
+  font-size: 1rem;
+  transition: var(--transition, all 0.2s ease-in-out);
+  background-color: var(--bg-white, #ffffff);
+  color: var(--text-primary, #1f2937);
 }
 
 .inputWithIcon input:focus {
   border-color: #6e8efb;
   outline: none;
-  box-shadow: 0 0 0 2px rgba(110, 142, 251, 0.2);
-  background-color: #fff;
+  box-shadow: 0 0 0 3px rgba(110, 142, 251, 0.1);
+  background-color: var(--bg-white, #ffffff);
 }
 
-.options {
+.inputWithIcon input:disabled {
+  background-color: var(--bg-gray, #f9fafb);
+  color: var(--text-light, #9ca3af);
+  cursor: not-allowed;
+}
+
+.formOptions {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 25px;
+  margin-bottom: 2rem;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 0.5rem;
 }
 
-.remember {
+.rememberMe {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--text-secondary, #6b7280);
 }
 
-.remember input {
-  margin-right: 8px;
-  accent-color: #6e8efb;
-  /* 修复记住我复选框背景色 */
-  background-color: #fafafa;
-  border-radius: 3px;
-  width: 16px;
-  height: 16px;
-}
-
-.remember label {
+.rememberMe input {
   margin: 0;
-  font-weight: normal;
-  color: #666;
+  accent-color: #6e8efb;
+  width: 1rem;
+  height: 1rem;
 }
 
-.forgotPassword {
+.forgotLink {
   color: #6e8efb;
   text-decoration: none;
   font-weight: 500;
-  font-size: 14px;
+  font-size: 0.875rem;
+  transition: var(--transition, all 0.2s ease-in-out);
 }
 
-.forgotPassword:hover {
+.forgotLink:hover {
   text-decoration: underline;
+  color: #5a7df9;
 }
 
 .loginButton {
   width: 100%;
-  padding: 15px;
-  background: linear-gradient(135deg, #6e8efb, #a777e3);
+  padding: 1rem 1.5rem;
+  background: var(--primary-gradient, linear-gradient(135deg, #6e8efb, #a777e3));
   color: white;
   border: none;
-  border-radius: 10px;
-  font-size: 16px;
+  border-radius: var(--radius-md, 8px);
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
-  margin-bottom: 25px;
+  transition: var(--transition, all 0.2s ease-in-out);
+  margin-bottom: 2rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 0.5rem;
+  box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
 }
 
 .loginButton:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(110, 142, 251, 0.4);
+  box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.1));
 }
 
 .loginButton:disabled {
@@ -298,81 +447,28 @@
   transform: none;
 }
 
-.dividerText {
-  display: flex;
-  align-items: center;
-  margin: 20px 0;
-  gap: 12px;
-}
-
-.dividerText span {
-  flex: 1;
-  height: 1px;
-  background: #ddd;
-}
-
-.dividerText p {
-  color: #777;
-  margin: 0;
-  font-size: 14px;
-  text-transform: uppercase;
-}
-
-.socialLogin {
-  display: flex;
-  justify-content: center;
-  gap: 15px;
-  margin-bottom: 25px;
-  flex-wrap: wrap;
-}
-
-.socialButton {
-  padding: 12px 20px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: none;
-  gap: 8px;
-  min-width: 120px;
-}
-
-.socialButton:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-.google {
-  background: #DB4437;
-}
-
-.facebook {
-  background: #4267B2;
-}
-
-.twitter {
-  background: #1DA1F2;
-}
-
-.register {
+.registerSection {
   text-align: center;
-  color: #555;
-  margin-top: auto;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color, #e5e7eb);
 }
 
-.register a {
+.registerSection p {
+  color: var(--text-secondary, #6b7280);
+  margin: 0 0 0.5rem 0;
+}
+
+.registerLink {
   color: #6e8efb;
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 0.875rem;
+  transition: var(--transition, all 0.2s ease-in-out);
 }
 
-.register a:hover {
+.registerLink:hover {
   text-decoration: underline;
+  color: #5a7df9;
 }
 
 /* 响应式设计 */
@@ -383,7 +479,7 @@
   }
   
   .leftPanel, .rightPanel {
-    padding: 40px 30px;
+    padding: 2rem 1.5rem;
   }
   
   .leftPanel {
@@ -394,50 +490,91 @@
     order: 1;
   }
   
-  .actionLinks {
-    flex-direction: column;
-    align-items: center;
+  .actionGrid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
   }
   
-  .linkButton {
-    width: 100%;
-    max-width: 200px;
-    text-align: center;
+  .logo {
+    font-size: 2rem;
   }
   
-  .socialLogin {
-    flex-direction: column;
+  .logo i {
+    font-size: 2.5rem;
   }
   
-  .socialButton {
-    width: 100%;
+  .heroText h2 {
+    font-size: 1.875rem;
   }
 }
 
 @media (max-width: 480px) {
   .leftPanel, .rightPanel {
-    padding: 30px 20px;
+    padding: 1.5rem 1rem;
   }
   
   .logo {
-    font-size: 24px;
+    font-size: 1.75rem;
   }
   
-  .welcomeText h1 {
-    font-size: 28px;
+  .heroText h2 {
+    font-size: 1.5rem;
   }
   
   .loginHeader h2 {
-    font-size: 24px;
+    font-size: 1.5rem;
   }
   
-  .options {
+  .formOptions {
     flex-direction: column;
     align-items: flex-start;
-    gap: 15px;
+    gap: 1rem;
   }
   
-  .forgotPassword {
-    margin-left: auto;
+  .forgotLink {
+    align-self: flex-end;
+  }
+  
+  .feature {
+    padding: 0.75rem;
+  }
+  
+  .feature i {
+    font-size: 1.25rem;
+  }
+}
+
+/* 深色模式支持 */
+@media (prefers-color-scheme: dark) {
+  .loginContainer {
+    --text-primary: #f9fafb;
+    --text-secondary: #d1d5db;
+    --text-light: #9ca3af;
+    --bg-white: #1f2937;
+    --bg-gray: #111827;
+    --border-color: #374151;
+  }
+  
+  .inputWithIcon input {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: var(--text-primary, #f9fafb);
+  }
+  
+  .inputWithIcon input:focus {
+    background-color: #374151;
+  }
+  
+  .secondaryButton {
+    background: #374151;
+    border-color: #4b5563;
+  }
+  
+  .welcomeCard {
+    background: var(--bg-white, #1f2937);
+  }
+  
+  .loginCard {
+    background: transparent;
   }
 }

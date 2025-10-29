@@ -1,14 +1,8 @@
 // src/lib/command-processor.js - 修复版本
-import { PrismaClient } from '@prisma/client';
-import { OpenAI } from 'openai';
 
-const prisma = new PrismaClient();
-
-// 初始化OpenAI - 使用与现有聊天相同的配置
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1',
-});
+// 移除顶部的直接导入，改为在方法内部动态导入
+// import { PrismaClient } from '@prisma/client';
+// import { OpenAI } from 'openai';
 
 export class CommandProcessor {
   constructor() {
@@ -20,6 +14,30 @@ export class CommandProcessor {
       '保存知识': this.handleSaveToKnowledge.bind(this), // 别名
       '创建项目': this.handleGenerateDraftProject.bind(this), // 别名
     };
+    
+    this.prisma = null;
+    this.openai = null;
+  }
+
+  // 获取 Prisma 实例
+  async getPrisma() {
+    if (!this.prisma) {
+      const { PrismaClient } = await import('@prisma/client');
+      this.prisma = new PrismaClient();
+    }
+    return this.prisma;
+  }
+
+  // 获取 OpenAI 实例
+  async getOpenAI() {
+    if (!this.openai) {
+      const { OpenAI } = await import('openai');
+      this.openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+        baseURL: process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1',
+      });
+    }
+    return this.openai;
   }
 
   async processMessage(message, context) {
@@ -40,6 +58,8 @@ export class CommandProcessor {
     const { userId, conversationHistory } = context;
     
     try {
+      const prisma = await this.getPrisma();
+      
       // 总结对话内容
       const summary = await this.summarizeConversation(conversationHistory);
       
@@ -84,6 +104,8 @@ export class CommandProcessor {
     const { userId, conversationHistory } = context;
     
     try {
+      const prisma = await this.getPrisma();
+      
       // 生成项目草案
       const projectDraft = await this.generateProjectDraft(conversationHistory);
       
@@ -151,6 +173,8 @@ export class CommandProcessor {
     const { userId } = context;
     
     try {
+      const prisma = await this.getPrisma();
+      
       // 获取用户的所有知识库内容
       const knowledges = await prisma.knowledge.findMany({
         where: { userId: parseInt(userId) }
@@ -190,7 +214,7 @@ export class CommandProcessor {
     }
   }
 
-  // 🔧 新增：内容分类方法（替代外部导入）
+  // 内容分类方法
   async categorizeContent(content) {
     const prompt = `请对以下内容进行分类，选择最合适的类别：
     
@@ -259,6 +283,8 @@ ${conversationHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
 
   async callAI(prompt) {
     try {
+      const openai = await this.getOpenAI();
+      
       const completion = await openai.chat.completions.create({
         model: process.env.OPENAI_MODEL || 'deepseek-chat',
         messages: [{ role: 'user', content: prompt }],
@@ -274,9 +300,11 @@ ${conversationHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
     }
   }
 
-  // 🔧 新增：销毁方法，用于清理资源
+  // 销毁方法，用于清理资源
   async destroy() {
-    await prisma.$disconnect();
+    if (this.prisma) {
+      await this.prisma.$disconnect();
+    }
   }
 }
 

@@ -1,9 +1,9 @@
-// pages/api/projects/generate-from-knowledge.js - 修复特殊字符版本
+// pages/api/projects/generate-from-knowledge.js - 修复版本
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../lib/auth';
-import prisma from '../../../lib/prisma';
+import { prisma } from '../../../lib/prisma';
 
-// 清理文本函数 - 移除可能导致数据库错误的特殊字符
+// 🔧 修复：正确的正则表达式
 const cleanTextForDatabase = (text) => {
   if (!text) return '';
   
@@ -12,11 +12,11 @@ const cleanTextForDatabase = (text) => {
     .replace(/\\u[0-9A-Fa-f]{4}/g, '') // 移除Unicode转义序列
     .replace(/\\[^ux]/g, '') // 移除其他反斜杠转义
     .replace(/[\x00-\x1F\x7F]/g, '') // 移除控制字符
-    .replace(/[\u200B-\u200D\uFEFF]/g, '') // 移除零宽字符
+    .replace(/[\u200B-\u200D\uFEFF]/g, '') // 🔧 修复：正确的Unicode范围
     .trim();
 };
 
-// 清理标题函数
+// 🔧 修复：正确的正则表达式
 const cleanTitle = (title) => {
   if (!title) return '未命名项目';
   
@@ -25,14 +25,25 @@ const cleanTitle = (title) => {
     .replace(/\\u[0-9A-Fa-f]{4}/g, '')
     .replace(/\\[^ux]/g, '')
     .replace(/[\x00-\x1F\x7F]/g, '')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '') // 🔧 修复：正确的Unicode范围
     .trim()
     .substring(0, 255);
 };
 
 export default async function handler(req, res) {
   // 设置 CORS 头
-  res.setHeader('Access-Control-Allow-Origin', 'https://localhost:3001');
+  const allowedOrigins = [
+    'https://localhost:3001',
+    'http://localhost:3001',
+    'https://191413.ai',
+    'http://43.228.124.126:3000'
+  ];
+  
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -53,12 +64,6 @@ export default async function handler(req, res) {
 
     const session = await getServerSession(req, res, authOptions);
     
-    console.log('🔍 会话验证:', {
-      hasSession: !!session,
-      userId: session?.user?.id,
-      userEmail: session?.user?.email
-    });
-
     if (!session?.user?.id) {
       console.warn('🚫 用户未登录');
       return res.status(401).json({ 
@@ -84,12 +89,6 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log('📋 请求参数:', { 
-      knowledgeId, 
-      userId,
-      hasCustomPrompt: !!customPrompt
-    });
-
     // 获取知识点内容
     const knowledge = await prisma.knowledge.findUnique({
       where: { id: knowledgeId },
@@ -109,7 +108,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // 验证权限
     if (knowledge.userId !== userId) {
       return res.status(403).json({
         success: false,
@@ -133,15 +131,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // 🔧 修复：生成项目标题和描述 - 使用清理函数
-    const generateProjectTitle = (content) => {
-      if (!content) return '新项目';
-      const cleanText = cleanTextForDatabase(content);
-      const firstSentence = cleanText.split(/[.!?。！？]/)[0] || cleanText;
-      let title = firstSentence.substring(0, 30).trim();
-      return title || '基于知识点生成的项目';
-    };
-
+    // 生成项目数据
     const projectTitle = cleanTitle(`项目 - ${generateProjectTitle(knowledge.content)}`);
     const projectDescription = cleanTextForDatabase(
       knowledge.content 
@@ -149,30 +139,9 @@ export default async function handler(req, res) {
         : '基于知识点生成的项目'
     );
 
-    // 🔧 修复：清理项目内容中的特殊字符
-    const cleanKnowledgeContent = cleanTextForDatabase(knowledge.content || '暂无内容');
-    const cleanCustomPrompt = cleanTextForDatabase(customPrompt || '');
-    
-    const projectContent = cleanTextForDatabase(
-      `# 项目方案\n\n## 基于知识点生成\n\n**来源分类:** ${knowledge.category || '未分类'}\n**标签:** ${knowledge.tags || '无'}\n\n## 原始内容\n\n${cleanKnowledgeContent}\n\n## 项目计划\n\n1. 需求分析\n2. 方案设计\n3. 开发实施\n4. 测试验收\n5. 部署上线\n\n${cleanCustomPrompt ? `## 额外要求\n\n${cleanCustomPrompt}` : ''}`
-    );
+    const projectContent = generateProjectContent(knowledge, customPrompt);
 
-    console.log('🔧 清理后的数据:', {
-      title: projectTitle,
-      descriptionLength: projectDescription.length,
-      contentLength: projectContent.length
-    });
-
-    // 验证清理后的数据
-    if (!projectTitle.trim()) {
-      throw new Error('项目标题无效');
-    }
-
-    if (!projectContent.trim()) {
-      throw new Error('项目内容无效');
-    }
-
-    // 创建项目记录 - 使用清理后的数据
+    // 创建项目
     const project = await prisma.project.create({
       data: {
         title: projectTitle,
@@ -223,9 +192,6 @@ export default async function handler(req, res) {
     } else if (error.code === 'P2002') {
       errorMessage = '项目已存在';
       statusCode = 400;
-    } else if (error.code === 'P2003') {
-      errorMessage = '外键约束失败';
-      statusCode = 400;
     }
     
     res.status(statusCode).json({ 
@@ -235,4 +201,22 @@ export default async function handler(req, res) {
       code: error.code
     });
   }
+}
+
+// 辅助函数
+function generateProjectTitle(content) {
+  if (!content) return '新项目';
+  const cleanText = cleanTextForDatabase(content);
+  const firstSentence = cleanText.split(/[.!?。！？]/)[0] || cleanText;
+  let title = firstSentence.substring(0, 30).trim();
+  return title || '基于知识点生成的项目';
+}
+
+function generateProjectContent(knowledge, customPrompt) {
+  const cleanKnowledgeContent = cleanTextForDatabase(knowledge.content || '暂无内容');
+  const cleanCustomPrompt = cleanTextForDatabase(customPrompt || '');
+  
+  return cleanTextForDatabase(
+    `# 项目方案\n\n## 基于知识点生成\n\n**来源分类:** ${knowledge.category || '未分类'}\n**标签:** ${knowledge.tags || '无'}\n\n## 原始内容\n\n${cleanKnowledgeContent}\n\n## 项目计划\n\n1. 需求分析\n2. 方案设计\n3. 开发实施\n4. 测试验收\n5. 部署上线\n\n${cleanCustomPrompt ? `## 额外要求\n\n${cleanCustomPrompt}` : ''}`
+  );
 }

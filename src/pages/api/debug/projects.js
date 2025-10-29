@@ -1,7 +1,5 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../lib/auth";
-import prisma from '../../../lib/prisma';
-
 export default async function handler(req, res) {
   console.log('🔍 开始调试项目API...');
   

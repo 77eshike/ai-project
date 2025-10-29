@@ -1,51 +1,60 @@
+// prisma/schema.prisma - 修复版本
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
-  id            Int      @id @default(autoincrement())
-  email         String   @unique
+  id            Int          @id @default(autoincrement())
+  email         String       @unique
   name          String?
   password      String?
   emailVerified DateTime?
   image         String?
   role          String?
-  status        Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  status        Boolean      @default(true)
+  // 审计
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
+ // 添加缺失的字段
+  lastLoginAt   DateTime?    @default(now())
+  preferences   Json?
+
+  // 关系
   accounts      Account[]
   sessions      Session[]
+  files         File[]
   knowledges    Knowledge[]
-  ownedProjects Project[]
-  projectMembers ProjectMember[]
+  conversations Conversation[]
+  projects      Project[]           // 用户创建的项目
+  projectMembers ProjectMember[]    // 用户参与的项目成员关系
 
-  @@map("User")
+  @@map("users")
 }
 
 model Account {
-  id                String   @id @default(cuid())
-  userId            Int
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?
-  access_token      String?
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?
-  session_state     String?
+  id                 String   @id @default(cuid())
+  userId             Int
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
-  @@map("Account")
 }
 
 model Session {
@@ -55,8 +64,29 @@ model Session {
   expires      DateTime
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
 
-  @@map("Session")
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model File {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  filename  String
+  key       String
+  size      Int
+  mimeType  String
+  url       String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Knowledge {
@@ -70,43 +100,72 @@ model Knowledge {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // 关系
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // 修复：添加反向关系
+  generatedProjects Project[] @relation("KnowledgeGeneratedProjects")
 
-  @@map("Knowledge")
   @@index([userId])
   @@index([category])
 }
 
+model Conversation {
+  id        String   @id @default(cuid())
+  title     String
+  messages  Json
+  userId    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  metadata  Json?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("conversations")
+}
+
+// 项目模型 - 完整版本
 model Project {
   id          String   @id @default(cuid())
   title       String
   description String?
-  content     String?
-  type        String   @default("DRAFT_PROJECT")
-  status      String   @default("DRAFT")
-  visibility  String   @default("PRIVATE")
+  content     String?  // 项目详细内容
+  type        String   @default("STANDARD_PROJECT") // 项目类型: DRAFT_PROJECT, STANDARD_PROJECT, TEAM_PROJECT, GENERAL
+  status      String   @default("DRAFT") // 项目状态: DRAFT, PUBLISHED, RECRUITING, IN_PROGRESS, COMPLETED, ARCHIVED
+  visibility  String   @default("PRIVATE") // 可见性: PRIVATE, PUBLIC, TEAM
   ownerId     Int
+  knowledgeSourceId String? // 从哪个知识库生成的
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  publishedAt DateTime?
-  knowledgeSourceId String?
-  
-  owner         User           @relation(fields: [ownerId], references: [id])
-  projectMembers ProjectMember[]
+
+  // 关系
+  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  projectMembers ProjectMember[] // 项目成员
+  // 修复：添加关系名称避免冲突
+  knowledgeSource Knowledge?    @relation("KnowledgeGeneratedProjects", fields: [knowledgeSourceId], references: [id], onDelete: SetNull)
 
   @@map("projects")
+  @@index([ownerId])
+  @@index([type])
+  @@index([status])
+  @@index([visibility])
+  @@index([knowledgeSourceId])
 }
 
+// 项目成员模型
 model ProjectMember {
   id        String   @id @default(cuid())
   projectId String
   userId    Int
-  role      String   @default("MEMBER")
+  role      String   @default("MEMBER") // 角色: OWNER, ADMIN, MEMBER, VIEWER
   joinedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  project Project @relation(fields: [projectId], references: [id])
-  user    User    @relation(fields: [userId], references: [id])
+  // 关系
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, userId])
-  @@map("project_members")
+  @@index([projectId])
+  @@index([userId])
+  @@index([role])
 }

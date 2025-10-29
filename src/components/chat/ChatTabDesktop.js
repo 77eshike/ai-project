@@ -1,4 +1,4 @@
-// src/components/chat/ChatTabDesktop.js - 修复权限处理
+// src/components/chat/ChatTabDesktop.js - 修复版本
 import { useState, useEffect, useCallback } from 'react';
 import ChatTabBase from './ChatTabBase';
 import useSpeech from '../../hooks/useSpeech';
@@ -216,6 +216,12 @@ const ChatTabDesktop = ({ user, voiceEnabled, toggleVoice, className }) => {
     );
   };
 
+  // 修复：检查平台锁定状态
+  const isPlatformLocked = useCallback(() => {
+    const lockInfo = getPlatformLockInfo();
+    return lockInfo.locked;
+  }, []);
+
   // 桌面端特定UI - 简化版本（移除会话有效提示）
   const desktopUI = (
     <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -226,7 +232,7 @@ const ChatTabDesktop = ({ user, voiceEnabled, toggleVoice, className }) => {
             <div className="text-sm font-medium text-gray-900">桌面端语音识别</div>
             <div className="text-xs text-gray-600">
               {deviceInfo.browser}
-              {!speech.isPlatformLocked && <span className="ml-2 text-green-600">🔄 平台可切换</span>}
+              {!isPlatformLocked() && <span className="ml-2 text-green-600">🔄 平台可切换</span>}
             </div>
           </div>
         </div>
@@ -254,7 +260,7 @@ const ChatTabDesktop = ({ user, voiceEnabled, toggleVoice, className }) => {
             speech.status === 'processing' ? 'text-blue-600' :
             speech.status === 'error' ? 'text-red-600' : 'text-gray-600'
           }`}>
-            {speech.status}
+            {speech.status || 'idle'}
           </span>
         </div>
       </div>
@@ -264,7 +270,7 @@ const ChatTabDesktop = ({ user, voiceEnabled, toggleVoice, className }) => {
         <div className="flex justify-between">
           <span>平台:</span>
           <span className="text-purple-600 font-medium">
-            {speech.platform === 'baidu' ? '百度语音' : speech.platform}
+            {speech.platform === 'baidu' ? '百度语音' : (speech.platform || 'web')}
           </span>
         </div>
         <div className="flex justify-between">

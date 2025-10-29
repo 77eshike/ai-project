@@ -1,4 +1,4 @@
-// middleware/rate-limit.js - 优化版本
+// /opt/ai-project/src/middleware/rate-limit.js - 修复版本
 const rateLimitMap = new Map();
 const CLEANUP_INTERVAL = 30 * 1000; // 30秒清理一次
 const DEFAULT_WINDOW_MS = 60 * 1000; // 1分钟默认窗口
@@ -254,9 +254,17 @@ function maskIP(ip) {
   return ip;
 }
 
+// Edge Runtime 兼容的字符串哈希函数
 function generateRateLimitKey(ip, pathname, userAgent) {
-  // 使用用户代理的前10个字符的简单哈希
-  const uaHash = Buffer.from(userAgent.substring(0, 10)).toString('base64').substring(0, 8);
+  // 简单的字符串哈希函数，替代 Buffer
+  let hash = 0;
+  const str = userAgent.substring(0, 10);
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  const uaHash = Math.abs(hash).toString(36).substring(0, 8);
   return `rate:${ip}:${pathname}:${uaHash}`;
 }
 
@@ -345,7 +353,7 @@ export function clearAllRateLimit() {
   return size;
 }
 
-// 定期清理过期的记录
+// 定期清理过期的记录 - Edge Runtime 中移除 setInterval
 function cleanupExpiredRecords() {
   const now = Date.now();
   let cleanedCount = 0;
@@ -365,8 +373,15 @@ function cleanupExpiredRecords() {
   return cleanedCount;
 }
 
-// 启动定期清理
-setInterval(cleanupExpiredRecords, CLEANUP_INTERVAL);
+// 在每次请求时执行清理（替代 setInterval）
+export function performCleanupIfNeeded() {
+  const now = Date.now();
+  // 每100次请求执行一次清理，避免性能影响
+  if (Math.random() < 0.01) {
+    return cleanupExpiredRecords();
+  }
+  return 0;
+}
 
 // 导出清理函数供外部调用
 export { cleanupExpiredRecords };

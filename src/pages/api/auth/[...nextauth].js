@@ -1,18 +1,30 @@
-// src/pages/api/auth/[...nextauth].js - 修复版本
+// src/pages/api/auth/[...nextauth].js - 完整修复版本
 import NextAuth from 'next-auth'
 import { authOptions } from '../../../lib/auth'
 
-// 🔧 关键修复：创建完全优化的配置
-const optimizedAuthOptions = {
+// 关键修复：简化配置，移除可能导致问题的选项
+export default NextAuth({
   ...authOptions,
-  // 🔧 完全禁用所有自动刷新
-  events: undefined, // 禁用所有事件
-  debug: false, // 完全禁用调试
-  logger: undefined, // 完全禁用日志
-}
+  // 确保 session 配置正确
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30天
+    updateAge: 24 * 60 * 60, // 24小时
+  },
+  // 简化事件处理
+  events: {
+    signOut: async (message) => {
+      console.log('用户登出事件触发');
+    },
+  },
+  // 页面配置
+  pages: {
+    signIn: '/auth/signin',
+    signOut: '/auth/signin',
+    error: '/auth/error',
+  },
+  // 调试模式
+  debug: process.env.NODE_ENV === 'development',
+})
 
-// 🔧 关键修复：只默认导出 NextAuth 处理器
-export default NextAuth(optimizedAuthOptions)
-
-// 🔧 关键修复：单独导出 getServerSession
 export { getServerSession } from 'next-auth/next'
