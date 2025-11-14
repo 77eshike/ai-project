@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   }
 
   const { id } = req.query;
-  const userId = parseInt(session.user.id);
+  const userId = session.user?.id;
 
   try {
     // 检查创意点权限

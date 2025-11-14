@@ -1,18 +1,28 @@
-// /opt/ai-project/src/lib/sessionWrapper.js - 优化版本
+// /opt/ai-project/src/lib/sessionWrapper.js - 完全修复String ID版本
 import { getServerSession } from 'next-auth/next';
 
-// 🔧 关键修复：直接从 lib 导入 authOptions，避免动态导入问题
-import { authOptions } from './auth';
+// 🔧 修复：避免动态导入，使用条件导入
+let authOptions;
+
+// 预加载 authOptions（在非 Edge 环境中）
+if (typeof window === 'undefined' && process.env.NEXT_RUNTIME !== 'edge') {
+  try {
+    // 在构建时静态导入
+    const authModule = require('./auth');
+    authOptions = authModule.authOptions;
+  } catch (error) {
+    console.warn('❌ 预加载 authOptions 失败:', error.message);
+  }
+}
 
 /**
- * 增强的会话缓存类
+ * 增强的会话缓存类 - Edge Runtime 兼容版本
  */
 class SessionCache {
   constructor() {
     this.cache = new Map();
     this.defaultDuration = 30 * 1000; // 30秒
     this.maxSize = 100;
-    this.cleanupInterval = 60 * 1000; // 1分钟清理一次
     
     this.stats = {
       hits: 0,
@@ -20,17 +30,14 @@ class SessionCache {
       sets: 0,
       evictions: 0
     };
-    
-    // 启动定期清理
-    this.startCleanup();
   }
 
   /**
-   * 生成缓存键
+   * 生成缓存键 - Edge Runtime 兼容
    */
   generateKey(req) {
     try {
-      const cookie = req.headers.cookie || '';
+      const cookie = req.headers.get('cookie') || '';
       
       // 优先使用会话token
       const sessionTokenMatch = cookie.match(/next-auth\.session-token=([^;]+)/);
@@ -44,8 +51,11 @@ class SessionCache {
         return `session-csrf-${csrfTokenMatch[1]}`;
       }
       
-      // 最终备用：使用cookie哈希
-      const cookieHash = Buffer.from(cookie).toString('base64').substring(0, 20);
+      // 最终备用：使用cookie哈希（Edge Runtime 兼容方式）
+      let cookieHash = '';
+      for (let i = 0; i < Math.min(cookie.length, 20); i++) {
+        cookieHash += cookie.charCodeAt(i).toString(36);
+      }
       return `session-fallback-${cookieHash}`;
     } catch (error) {
       return `session-error-${Date.now()}`;
@@ -118,10 +128,6 @@ class SessionCache {
     if (lruKey) {
       this.cache.delete(lruKey);
       this.stats.evictions++;
-      
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🗑️ 清理LRU会话缓存:', lruKey.substring(0, 20));
-      }
     }
   }
 
@@ -139,39 +145,26 @@ class SessionCache {
       }
     }
 
-    if (cleanedCount > 0 && process.env.NODE_ENV === 'development') {
-      console.log(`🧹 自动清理 ${cleanedCount} 个过期会话缓存`);
-    }
-
     return cleanedCount;
   }
 
   /**
-   * 启动定期清理
-   */
-  startCleanup() {
-    if (typeof setInterval !== 'undefined' && process.env.NODE_ENV !== 'test') {
-      setInterval(() => {
-        this.cleanup();
-      }, this.cleanupInterval);
-    }
-  }
-
-  /**
-   * 清除特定用户的缓存
+   * 🔧 修复：清除特定用户的缓存 - 修复String ID处理
    */
   clearUserSessions(userId) {
     let clearedCount = 0;
     
+    // 🔧 修复：确保userId是字符串
+    const targetUserId = String(userId || '');
+    
     for (const [key, item] of this.cache.entries()) {
-      if (item.data?.user?.id === userId) {
+      const itemUserId = item.data?.user?.id || item.data?.id;
+      
+      // 🔧 修复：直接比较字符串，不进行类型转换
+      if (itemUserId && String(itemUserId) === targetUserId) {
         this.cache.delete(key);
         clearedCount++;
       }
-    }
-    
-    if (clearedCount > 0 && process.env.NODE_ENV === 'development') {
-      console.log(`🧹 清除用户 ${userId} 的 ${clearedCount} 个会话缓存`);
     }
     
     return clearedCount;
@@ -183,10 +176,10 @@ class SessionCache {
   clearAll() {
     const previousSize = this.cache.size;
     this.cache.clear();
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`🧹 清除所有会话缓存: ${previousSize} 个条目`);
-    }
+    this.stats.hits = 0;
+    this.stats.misses = 0;
+    this.stats.sets = 0;
+    this.stats.evictions = 0;
     
     return previousSize;
   }
@@ -214,7 +207,7 @@ class SessionCache {
       misses: this.stats.misses,
       sets: this.stats.sets,
       evictions: this.stats.evictions,
-      memoryUsage: `${(process.memoryUsage?.().heapUsed / 1024 / 1024).toFixed(2)}MB` || 'N/A'
+      timestamp: new Date().toISOString()
     };
   }
 }
@@ -223,9 +216,22 @@ class SessionCache {
 const sessionCache = new SessionCache();
 
 /**
- * 获取缓存的服务器会话
+ * 获取缓存的服务器会话 - Edge Runtime 兼容版本
  */
 export async function getCachedServerSession(req, res) {
+  // 🔧 在 Edge Runtime 中，直接返回 null 或使用简化逻辑
+  if (process.env.NEXT_RUNTIME === 'edge') {
+    console.log('🔧 Edge Runtime: 跳过会话缓存');
+    try {
+      // 在 Edge Runtime 中使用简化的会话获取
+      const session = await getServerSession(req, res, await getEdgeAuthOptions());
+      return session;
+    } catch (error) {
+      console.error('❌ Edge Runtime 会话获取失败:', error);
+      return null;
+    }
+  }
+
   const startTime = Date.now();
   
   try {
@@ -235,57 +241,106 @@ export async function getCachedServerSession(req, res) {
     const cachedSession = sessionCache.get(cacheKey);
     
     if (cachedSession !== null) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`⚡ 会话缓存命中: ${Date.now() - startTime}ms`);
-      }
       return cachedSession;
     }
     
-    if (process.env.NODE_ENV === 'development') {
-      console.log('🔐 获取新会话...');
-    }
+    // 🔧 修复：使用同步方式获取 authOptions
+    const session = await getServerSession(req, res, await getAuthOptions());
     
-    // 🔧 修复：直接使用导入的 authOptions
-    const session = await getServerSession(req, res, authOptions);
-    
-    // 缓存会话结果（包括null）
-    const cacheDuration = session ? 30 * 1000 : 10 * 1000; // 有会话缓存30秒，无会话缓存10秒
+    // 缓存会话结果
+    const cacheDuration = session ? 30 * 1000 : 10 * 1000;
     sessionCache.set(cacheKey, session, cacheDuration);
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`✅ 会话获取完成: ${Date.now() - startTime}ms`, {
-        hasSession: !!session,
-        userId: session?.user?.id
-      });
-    }
     
     return session;
     
   } catch (error) {
     console.error('❌ 获取缓存会话错误:', error);
     
-    // 错误处理：尝试直接获取会话（绕过缓存）
+    // 错误处理：尝试直接获取会话
     try {
-      console.log('🔄 尝试直接获取会话（绕过缓存）...');
-      const fallbackSession = await getServerSession(req, res, authOptions);
-      
-      if (process.env.NODE_ENV === 'development') {
-        console.log('✅ 后备会话获取成功');
-      }
-      
+      const fallbackSession = await getServerSession(req, res, await getAuthOptions());
       return fallbackSession;
     } catch (fallbackError) {
-      console.error('❌ 后备会话获取也失败:', fallbackError);
+      console.error('❌ 后备会话获取失败:', fallbackError);
       return null;
     }
   }
 }
 
 /**
- * 清除特定用户的会话缓存
+ * 🔧 新增：获取 authOptions 的兼容函数
+ */
+async function getAuthOptions() {
+  if (authOptions) {
+    return authOptions;
+  }
+  
+  try {
+    // 在非 Edge 环境中使用 require
+    if (typeof window === 'undefined' && process.env.NEXT_RUNTIME !== 'edge') {
+      const authModule = require('./auth');
+      authOptions = authModule.authOptions;
+      return authOptions;
+    }
+    
+    // 降级方案
+    return getFallbackAuthOptions();
+  } catch (error) {
+    console.error('❌ 获取 authOptions 失败:', error);
+    return getFallbackAuthOptions();
+  }
+}
+
+/**
+ * 🔧 新增：Edge Runtime 专用的 authOptions 获取
+ */
+async function getEdgeAuthOptions() {
+  // Edge Runtime 中的简化配置
+  return {
+    secret: process.env.NEXTAUTH_SECRET,
+    providers: [],
+    session: { strategy: 'jwt' },
+    callbacks: {
+      async jwt({ token, user }) {
+        if (user) {
+          // 🔧 修复：确保用户ID是字符串
+          token.id = String(user.id || '');
+          token.email = user.email;
+        }
+        return token;
+      },
+      async session({ session, token }) {
+        if (token) {
+          // 🔧 修复：确保用户ID是字符串
+          session.user.id = String(token.id || '');
+          session.user.email = token.email;
+        }
+        return session;
+      }
+    }
+  };
+}
+
+/**
+ * 🔧 新增：降级 authOptions
+ */
+function getFallbackAuthOptions() {
+  return {
+    secret: process.env.NEXTAUTH_SECRET || 'fallback-secret',
+    providers: [],
+    session: { strategy: 'jwt' }
+  };
+}
+
+/**
+ * 🔧 修复：清除特定用户的会话缓存 - 修复String ID处理
  */
 export function clearUserSessionCache(userId) {
-  return sessionCache.clearUserSessions(userId);
+  if (!userId) return 0;
+  
+  // 🔧 修复：确保userId是字符串
+  const stringUserId = String(userId);
+  return sessionCache.clearUserSessions(stringUserId);
 }
 
 /**
@@ -307,16 +362,6 @@ export function getSessionCacheStats() {
  */
 export function cleanupExpiredSessions() {
   return sessionCache.cleanup();
-}
-
-// 开发环境：定期输出统计信息
-if (process.env.NODE_ENV === 'development' && typeof setInterval !== 'undefined') {
-  setInterval(() => {
-    const stats = sessionCache.getStats();
-    if (stats.activeSessions > 0) {
-      console.log('📊 会话缓存统计:', stats);
-    }
-  }, 5 * 60 * 1000); // 每5分钟输出一次
 }
 
 export default getCachedServerSession;

@@ -1,60 +1,34 @@
-// pages/api/ai/conversations.js
-import { getServerSession } from 'next-auth/next'
-
-import { authOptions } from '../../../lib/auth'
-
-const globalForPrisma = globalThis
-const prisma = globalForPrisma.prisma || prisma
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
-
-// 配置常量
-const MAX_CONVERSATIONS_PER_PAGE = 50
-const DEFAULT_PAGE_SIZE = 20
+// pages/api/ai/conversations.js - 对话管理API
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../../../lib/auth';
+import { prisma } from '../../../lib/prisma';
 
 export default async function handler(req, res) {
-  const session = await getServerSession(req, res, authOptions)
+  const session = await getServerSession(req, res, authOptions);
 
-  if (!session) {
-    return res.status(401).json({ error: '未经授权的访问' })
+  if (!session?.user?.id) {
+    return res.status(401).json({ error: '请先登录' });
   }
 
-  const userId = parseInt(session.user.id)
+  const userId = session.user.id;
 
-  if (req.method === 'GET') {
-    try {
-      // 获取查询参数
-      const page = parseInt(req.query.page) || 1
-      const limit = parseInt(req.query.limit) || DEFAULT_PAGE_SIZE
-      const search = req.query.search || ''
+  try {
+    if (req.method === 'GET') {
+      // 获取对话列表
+      const { page = 1, limit = 20, search } = req.query;
       
-      // 验证参数
-      if (page < 1) {
-        return res.status(400).json({ error: '页码必须大于0' })
-      }
+      const skip = (parseInt(page) - 1) * parseInt(limit);
       
-      if (limit < 1 || limit > MAX_CONVERSATIONS_PER_PAGE) {
-        return res.status(400).json({ 
-          error: `每页数量必须在1-${MAX_CONVERSATIONS_PER_PAGE}之间` 
-        })
-      }
-
-      const skip = (page - 1) * limit
-
-      // 构建查询条件
-      const where = { 
+      const where = {
         userId,
         ...(search && {
           OR: [
             { title: { contains: search, mode: 'insensitive' } },
-            { messages: { 
-              path: '$[*].content', 
-              string_contains: search 
-            }}
+            { messages: { path: '$[*].content', string_contains: search } }
           ]
         })
-      }
+      };
 
-      // 获取对话列表和总数（用于分页）
       const [conversations, totalCount] = await Promise.all([
         prisma.conversation.findMany({
           where,
@@ -63,78 +37,57 @@ export default async function handler(req, res) {
             title: true,
             createdAt: true,
             updatedAt: true,
-            // 计算消息数量而不是使用关系计数
-            messages: {
-              select: { id: true } // 只选择id用于计数，减少数据传输
-            }
+            metadata: true
           },
           orderBy: { updatedAt: 'desc' },
-          skip,
-          take: limit
+          skip: skip,
+          take: parseInt(limit)
         }),
         prisma.conversation.count({ where })
-      ])
+      ]);
 
-      // 处理返回数据
-      const conversationsWithCount = conversations.map(convo => ({
-        id: convo.id,
-        title: convo.title,
-        createdAt: convo.createdAt,
-        updatedAt: convo.updatedAt,
-        messageCount: convo.messages.length
-      }))
-
-      res.status(200).json({ 
-        conversations: conversationsWithCount,
+      res.status(200).json({
+        success: true,
+        conversations: conversations.map(conv => ({
+          ...conv,
+          messageCount: 0 // 由于messages是JSON，这里不计算数量
+        })),
         pagination: {
-          page,
-          limit,
+          page: parseInt(page),
+          limit: parseInt(limit),
           total: totalCount,
-          totalPages: Math.ceil(totalCount / limit),
-          hasNext: page * limit < totalCount,
-          hasPrev: page > 1
+          totalPages: Math.ceil(totalCount / parseInt(limit))
         }
-      })
+      });
 
-    } catch (error) {
-      console.error('获取会话列表错误:', error)
-      res.status(500).json({ error: '获取对话列表失败' })
-    }
-  } else if (req.method === 'DELETE') {
-    // 批量删除对话
-    try {
-      const { conversationIds } = req.body
-      
+    } else if (req.method === 'DELETE') {
+      // 删除对话
+      const { conversationIds } = req.body;
+
       if (!conversationIds || !Array.isArray(conversationIds)) {
-        return res.status(400).json({ error: '需要提供对话ID数组' })
-      }
-
-      if (conversationIds.length === 0) {
-        return res.status(400).json({ error: '对话ID数组不能为空' })
-      }
-
-      // 限制一次最多删除50个对话
-      if (conversationIds.length > 50) {
-        return res.status(400).json({ error: '一次最多删除50个对话' })
+        return res.status(400).json({ error: '需要提供对话ID数组' });
       }
 
       const result = await prisma.conversation.deleteMany({
-        where: { 
+        where: {
           id: { in: conversationIds },
-          userId 
+          userId
         }
-      })
+      });
 
-      res.status(200).json({ 
-        success: true, 
-        deletedCount: result.count 
-      })
+      res.status(200).json({
+        success: true,
+        deletedCount: result.count
+      });
 
-    } catch (error) {
-      console.error('批量删除会话错误:', error)
-      res.status(500).json({ error: '删除对话失败' })
+    } else {
+      res.status(405).json({ error: '方法不允许' });
     }
-  } else {
-    res.status(405).json({ error: '方法不允许' })
+  } catch (error) {
+    console.error('对话管理API错误:', error);
+    res.status(500).json({
+      error: '操作失败',
+      code: 'CONVERSATION_API_ERROR'
+    });
   }
 }

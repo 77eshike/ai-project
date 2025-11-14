@@ -1,0 +1,6 @@
+2025-11-05T04:49:31:  ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+2025-11-05T04:49:31:  ⚠ "next start" does not work with "output: standalone" configuration. Use "node .next/standalone/server.js" instead.
+2025-11-05T04:50:19: ❌ 认证过程错误: 用户不存在
+2025-11-05T04:50:28: ❌ 认证过程错误: 用户不存在
+2025-11-05T04:50:49: ❌ 认证过程错误: 用户不存在
+2025-11-05T04:54:30: ❌ 认证过程错误: 用户不存在

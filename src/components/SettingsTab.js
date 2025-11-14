@@ -1,4 +1,4 @@
-// src/components/SettingsTab.js - 修复退出登录版本
+// src/components/SettingsTab.js - 完整修复版本
 import { useState } from 'react';
 import { signOut } from 'next-auth/react';
 
@@ -44,10 +44,50 @@ export default function SettingsTab({
       });
     } catch (error) {
       console.error('直接退出失败:', error);
-      // 备用方法
       window.location.href = '/auth/signin';
     }
   };
+
+  // 格式化日期显示
+  const formatDate = (dateString) => {
+    if (!dateString) return '从未登录';
+    try {
+      return new Date(dateString).toLocaleString('zh-CN');
+    } catch (e) {
+      return '日期格式错误';
+    }
+  };
+
+  // 获取状态显示文本和颜色
+  const getStatusInfo = (status) => {
+    switch (status) {
+      case 'ACTIVE':
+        return { text: '正常', color: 'green' };
+      case 'INACTIVE':
+        return { text: '未激活', color: 'yellow' };
+      case 'SUSPENDED':
+        return { text: '已暂停', color: 'red' };
+      default:
+        return { text: '未知', color: 'gray' };
+    }
+  };
+
+  // 获取角色显示文本
+  const getRoleText = (role) => {
+    switch (role) {
+      case 'ADMIN':
+        return '管理员';
+      case 'MODERATOR':
+        return '版主';
+      case 'USER':
+        return '普通用户';
+      default:
+        return '用户';
+    }
+  };
+
+  const statusInfo = getStatusInfo(user?.status);
+  const roleText = getRoleText(user?.role);
 
   return (
     <div className="p-6">
@@ -90,28 +130,89 @@ export default function SettingsTab({
                   {/* 用户信息 */}
                   <div>
                     <h3 className="text-sm font-medium text-gray-900 mb-4">个人信息</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          姓名
-                        </label>
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            name="name"
-                            value={formData.name}
-                            onChange={handleInputChange}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    <div className="space-y-4">
+                      {/* 头像和基本信息 */}
+                      <div className="flex items-start space-x-4">
+                        {user?.image ? (
+                          <img
+                            src={user.image}
+                            alt="头像"
+                            className="w-16 h-16 rounded-full object-cover"
                           />
                         ) : (
-                          <p className="text-gray-900">{user?.name || '未设置'}</p>
+                          <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
+                            <span className="text-2xl text-gray-500">
+                              {user?.name?.charAt(0) || user?.email?.charAt(0) || 'U'}
+                            </span>
+                          </div>
                         )}
+                        <div className="flex-1">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                姓名
+                              </label>
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  name="name"
+                                  value={formData.name}
+                                  onChange={handleInputChange}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              ) : (
+                                <p className="text-gray-900">{user?.name || '未设置'}</p>
+                              )}
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                邮箱
+                              </label>
+                              <div className="flex items-center">
+                                <p className="text-gray-900 mr-2">{user?.email}</p>
+                                {user?.emailVerified ? (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    已验证
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                    未验证
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div>
+
+                      {/* 时间信息 */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            账户创建时间
+                          </label>
+                          <p className="text-gray-900 text-sm">
+                            {formatDate(user?.createdAt)}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            最后登录时间
+                          </label>
+                          <p className="text-gray-900 text-sm">
+                            {formatDate(user?.lastLoginAt)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* 用户ID */}
+                      <div className="pt-4 border-t border-gray-200">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          邮箱
+                          用户ID
                         </label>
-                        <p className="text-gray-900">{user?.email}</p>
+                        <p className="text-gray-900 text-sm font-mono bg-gray-50 p-2 rounded">
+                          {user?.id || '未知'}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -124,14 +225,30 @@ export default function SettingsTab({
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           角色
                         </label>
-                        <p className="text-gray-900 capitalize">{user?.role?.toLowerCase() || 'user'}</p>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          user?.role === 'ADMIN' 
+                            ? 'bg-purple-100 text-purple-800'
+                            : user?.role === 'MODERATOR'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {roleText}
+                        </span>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           状态
                         </label>
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          正常
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          statusInfo.color === 'green' 
+                            ? 'bg-green-100 text-green-800'
+                            : statusInfo.color === 'yellow'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : statusInfo.color === 'red'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {statusInfo.text}
                         </span>
                       </div>
                     </div>
@@ -226,7 +343,63 @@ export default function SettingsTab({
               </div>
             )}
 
-            {/* 其他设置部分... */}
+            {activeSection === 'privacy' && (
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-6">隐私安全</h2>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center py-3 border-b border-gray-200">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-900">数据导出</h3>
+                      <p className="text-sm text-gray-500">导出您的个人数据</p>
+                    </div>
+                    <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm">
+                      导出数据
+                    </button>
+                  </div>
+                  
+                  <div className="flex justify-between items-center py-3 border-b border-gray-200">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-900">账户删除</h3>
+                      <p className="text-sm text-gray-500">永久删除您的账户和所有数据</p>
+                    </div>
+                    <button className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm">
+                      删除账户
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeSection === 'notifications' && (
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-6">通知设置</h2>
+                <div className="space-y-4">
+                  {[
+                    { name: '邮箱通知', description: '接收重要通知和更新', enabled: true },
+                    { name: '推送通知', description: '接收实时推送通知', enabled: false },
+                    { name: '营销信息', description: '接收产品更新和优惠信息', enabled: false },
+                  ].map((item) => (
+                    <div key={item.name} className="flex items-center justify-between py-3 border-b border-gray-200">
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-900">{item.name}</h3>
+                        <p className="text-sm text-gray-500">{item.description}</p>
+                      </div>
+                      <button
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                          item.enabled ? 'bg-blue-600' : 'bg-gray-200'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            item.enabled ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

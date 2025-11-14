@@ -1,0 +1,20 @@
+// src/lib/prisma.js - 完全修复版本
+import { PrismaClient } from '@prisma/client'
+
+// 创建单个实例（简化版本）
+const prismaInstance = new PrismaClient({
+  log: process.env.NODE_ENV === 'development' 
+    ? ['error', 'warn'] 
+    : ['error'],
+  errorFormat: 'minimal'
+})
+
+// 初始化连接
+prismaInstance.$connect()
+  .then(() => console.log('✅ Prisma 数据库连接成功'))
+  .catch(error => console.error('❌ Prisma 连接失败:', error.message))
+
+// 统一导出同一个实例
+export const prisma = prismaInstance
+export const getPrisma = () => Promise.resolve(prismaInstance)
+export default prismaInstance

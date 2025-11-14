@@ -1,54 +1,53 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: false,
+  // 基础配置
+  trailingSlash: false,
+  reactStrictMode: true,
   poweredByHeader: false,
-  generateEtags: false,
   
-  // 构建配置优化
-  generateBuildId: async () => {
-    return `build-${Date.now().toString(36)}`;
-  },
-  
-  // 压缩和优化
-  compress: true,
-  
-  // 图片配置优化
+  // 图片配置
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**.191413.ai',
-      },
-      {
-        protocol: 'https',
-        hostname: 'avatars.githubusercontent.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-      },
-      {
-        protocol: 'http',
-        hostname: 'localhost',
-      },
-      {
-        protocol: 'http',
-        hostname: '127.0.0.1',
-      },
-      {
-        protocol: 'http',
-        hostname: '43.228.124.126',
-      },
-    ],
-    formats: ['image/webp', 'image/avif'],
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    domains: ['localhost', '127.0.0.1', '43.228.124.126', '191413.ai'],
+    unoptimized: process.env.NODE_ENV === 'development',
+    formats: ['image/avif', 'image/webp'],
     minimumCacheTTL: 60,
-    dangerouslyAllowSVG: true,
-    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
   
-  // 安全头配置
+  // 构建配置
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  
+  // 🔧 修复：移除已弃用的 runtimeConfig
+  // serverRuntimeConfig 和 publicRuntimeConfig 在 Next.js 15 中已弃用
+  
+  // 环境变量
+  env: {
+    NEXT_PUBLIC_APP_URL: process.env.NEXTAUTH_URL || 'https://191413.ai',
+    NEXT_PUBLIC_ENABLE_DEBUG: process.env.NEXT_PUBLIC_ENABLE_DEBUG || 'false',
+  },
+  
+  // 重定向配置
+  async redirects() {
+    return [
+      {
+        source: '/home',
+        destination: '/',
+        permanent: true,
+      },
+      {
+        source: '/api',
+        destination: '/api/health',
+        permanent: false,
+      },
+    ];
+  },
+  
+  // 🔧 修复：安全头配置
   async headers() {
     return [
       {
@@ -77,68 +76,88 @@ const nextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=0, must-revalidate',
+            value: 'no-store, max-age=0, must-revalidate',
+          },
+        ],
+      },
+      {
+        source: '/_next/static/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
           },
         ],
       },
     ];
   },
   
-  // Webpack 配置优化
-  webpack: (config, { dev, isServer, webpack }) => {
-    // 添加构建ID到环境变量
-    config.plugins.push(
-      new webpack.DefinePlugin({
-        'process.env.BUILD_TIMESTAMP': JSON.stringify(Date.now()),
-        'process.env.NEXT_PUBLIC_APP_URL': JSON.stringify(process.env.NEXTAUTH_URL || 'http://43.228.124.126'),
-        'process.env.OPENAI_API_KEY': JSON.stringify(process.env.OPENAI_API_KEY || ''),
-        'process.env.NEXTAUTH_SECRET': JSON.stringify(process.env.NEXTAUTH_SECRET || ''),
-      })
-    );
-
-    // 生产环境检查必需变量
-    if (!dev && isServer) {
-      const requiredEnvVars = ['OPENAI_API_KEY', 'NEXTAUTH_SECRET', 'DATABASE_URL'];
-      const missing = requiredEnvVars.filter(varName => !process.env[varName]);
-      if (missing.length > 0) {
-        throw new Error(`缺少必需环境变量: ${missing.join(', ')}`);
-      }
-    }
-
-    // 模块解析优化
-    config.resolve = {
-      ...config.resolve,
-      fallback: {
-        ...config.resolve.fallback,
+  // 🔧 修复：简化的 Webpack 配置
+  webpack: (config, { isServer, dev }) => {
+    // 客户端配置
+    if (!isServer) {
+      config.resolve.fallback = {
         fs: false,
-        path: false,
-        os: false,
-        crypto: false,
-        stream: false,
-      }
-    };
-
+        net: false,
+        tls: false,
+        crypto: require.resolve('crypto-browserify'),
+        stream: require.resolve('stream-browserify'),
+        path: require.resolve('path-browserify'),
+        os: require.resolve('os-browserify/browser'),
+        http: require.resolve('stream-http'),
+        https: require.resolve('https-browserify'),
+        zlib: require.resolve('browserify-zlib'),
+        // 🔧 移除：vm-browserify 可能不需要
+        // vm: false,
+      };
+    }
+    
     return config;
   },
   
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  
+  // 🔧 修复：编译器配置
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? {
       exclude: ['error', 'warn'],
     } : false,
   },
   
-  // 实验性功能
+  // 🔧 修复：输出配置
+  output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
+  
+  // 🔧 修复：压缩配置
+  compress: true,
+  
+  // 🔧 修复：移除已弃用的 swcMinify（Next.js 15 默认启用）
+  // swcMinify: true, // 已弃用，Next.js 15 默认启用
+  
+  // 🔧 新增：实验性功能
   experimental: {
     optimizeCss: true,
-  }
+  },
+};
+
+// 🔧 优化：详细的配置日志
+console.log('🔧 Next.js 配置 - 详细环境检查:', {
+  环境: process.env.NODE_ENV,
+  应用地址: process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL,
+  数据库: process.env.DATABASE_URL ? '已配置' : '未配置',
+  认证密钥: process.env.NEXTAUTH_SECRET ? '已配置' : '未配置',
+  API密钥: (process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY) ? '已配置' : '未配置',
+  调试模式: process.env.NEXT_PUBLIC_ENABLE_DEBUG === 'true',
+});
+
+// 🔧 新增：环境变量验证
+const requiredEnvVars = [
+  'NEXTAUTH_URL',
+  'NEXTAUTH_SECRET',
+  'DATABASE_URL'
+];
+
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingEnvVars.length > 0 && process.env.NODE_ENV === 'production') {
+  console.warn('⚠️ 生产环境缺少必要环境变量:', missingEnvVars);
 }
 
-module.exports = nextConfig
+module.exports = nextConfig;

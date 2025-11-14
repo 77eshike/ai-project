@@ -1,263 +1,284 @@
-// src/pages/dashboard.js - 应用安全钩子的版本
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../lib/auth';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+// src/pages/dashboard.js - 完整用户信息修复版本
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
+import { useUser } from '../contexts/UserContext';
+import { KnowledgeProvider } from '../contexts/KnowledgeContext';
 import Head from 'next/head';
-import SafeDashboardLayout from '../components/SafeDashboardLayout';
-import DashboardErrorBoundary from '../components/DashboardErrorBoundary';
+import DashboardLayout from '../components/DashboardLayout';
 import OverviewTab from '../components/OverviewTab';
 import ProjectsTab from '../components/ProjectsTab';
 import ChatTab from '../components/chat';
 import KnowledgeTab from '../components/KnowledgeTab';
 import SettingsTab from '../components/SettingsTab';
 
-// 导入安全钩子 - 替换原来的热修复
-import { useDashboardSafety, useSafeData, useSafeUser } from '../hooks/useDashboardSafety';
-
-// 标签页配置
-const TABS = {
-  OVERVIEW: 'overview',
-  PROJECTS: 'projects', 
-  CHAT: 'chat',
-  KNOWLEDGE: 'knowledge',
-  SETTINGS: 'settings'
+const CONFIG = {
+  TABS: {
+    OVERVIEW: 'overview',
+    PROJECTS: 'projects', 
+    CHAT: 'chat',
+    KNOWLEDGE: 'knowledge',
+    SETTINGS: 'settings'
+  },
+  MOBILE_BREAKPOINT: 768,
+  LOADING_DELAY: 300
 };
 
 const TAB_CONFIG = {
-  [TABS.OVERVIEW]: {
-    title: '概览',
-    component: OverviewTab,
+  [CONFIG.TABS.OVERVIEW]: { 
+    title: '概览', 
+    component: OverviewTab, 
     icon: '📊',
-    description: '查看项目统计和活动概览'
+    description: '查看项目概览和统计信息'
   },
-  [TABS.PROJECTS]: {
-    title: '项目',
-    component: ProjectsTab,
+  [CONFIG.TABS.PROJECTS]: { 
+    title: '项目', 
+    component: ProjectsTab, 
     icon: '📁',
-    description: '管理您的项目和任务'
+    description: '管理您的项目'
   },
-  [TABS.CHAT]: {
-    title: 'AI对话',
-    component: ChatTab,
+  [CONFIG.TABS.CHAT]: { 
+    title: 'AI对话', 
+    component: ChatTab, 
     icon: '💬',
-    description: '与AI助手进行智能对话'
+    description: '与AI助手对话'
   },
-  [TABS.KNOWLEDGE]: {
-    title: '知识库',
-    component: KnowledgeTab,
+  [CONFIG.TABS.KNOWLEDGE]: { 
+    title: '知识库', 
+    component: KnowledgeTab, 
     icon: '📚',
-    description: '管理知识点和学习资料'
+    description: '管理知识库内容'
   },
-  [TABS.SETTINGS]: {
-    title: '设置',
-    component: SettingsTab,
+  [CONFIG.TABS.SETTINGS]: { 
+    title: '设置', 
+    component: SettingsTab, 
     icon: '⚙️',
     description: '账户和偏好设置'
   }
 };
 
-const TAB_VALUES = Object.values(TABS);
+const TAB_VALUES = Object.values(CONFIG.TABS);
 
-// 加载组件
-const LoadingSpinner = ({ message = '加载中...' }) => (
-  <div className="min-h-screen flex items-center justify-center bg-gray-50">
-    <div className="text-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-      <p className="mt-4 text-gray-600">{message}</p>
-    </div>
-  </div>
-);
-
-// 错误显示组件
-const ErrorDisplay = ({ title, message, onRetry, onBack }) => (
-  <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-    <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
-      <div className="text-red-500 text-6xl mb-4">⚠️</div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-2">{title}</h2>
-      <p className="text-gray-600 mb-6">{message}</p>
-      <div className="space-y-3">
-        {onRetry && (
-          <button
-            onClick={onRetry}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-          >
-            重试
-          </button>
-        )}
-        {onBack && (
-          <button
-            onClick={onBack}
-            className="w-full bg-gray-600 text-white py-3 rounded-lg hover:bg-gray-700 transition-colors font-medium"
-          >
-            返回安全页
-          </button>
+const LoadingSpinner = ({ message = '加载中...', subMessage = '' }) => {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600">{message}</p>
+        {subMessage && (
+          <p className="text-sm text-gray-500 mt-2">{subMessage}</p>
         )}
       </div>
     </div>
-  </div>
-);
+  );
+};
 
-export default function Dashboard({ session: serverSession, error: serverError }) {
-  const router = useRouter();
-  const { data: clientSession, status } = useSession();
-  
-  const [activeTab, setActiveTab] = useState(TABS.OVERVIEW);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
+const useDeviceDetection = (isClient) => {
   const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (!isClient) return;
+
+    const checkMobile = () => {
+      const mobile = window.innerWidth < CONFIG.MOBILE_BREAKPOINT;
+      setIsMobile(mobile);
+    };
+
+    checkMobile();
+    
+    let resizeTimeout;
+    const handleResize = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(checkMobile, 250);
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(resizeTimeout);
+    };
+  }, [isClient]);
+
+  return isMobile;
+};
+
+export default function Dashboard({ session: serverSession }) {
+  const router = useRouter();
+  const { data: session, status, update: updateSession } = useSession();
+  const { user, loading: userLoading, logout, voiceEnabled, toggleVoice } = useUser();
+  
+  const [activeTab, setActiveTab] = useState(CONFIG.TABS.OVERVIEW);
   const [isClient, setIsClient] = useState(false);
-  const [error, setError] = useState(serverError || null);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
 
-  // 🔧 应用安全保护钩子 - 替换原来的热修复
-  useDashboardSafety();
-  const { safeGet, safeCall } = useSafeData();
-
-  // 安全的客户端检测
+  // 🔧 客户端检测
   useEffect(() => {
     setIsClient(true);
-    const timer = setTimeout(() => setIsInitialized(true), 100);
-    return () => clearTimeout(timer);
   }, []);
 
-  // 安全的标签页初始化 - 使用安全数据访问
+  // 🔧 关键修复：简化的认证检查
+  useEffect(() => {
+    if (!isClient) return;
+
+    console.log('🔐 Dashboard 认证状态:', { 
+      status, 
+      hasSession: !!session,
+      authChecked,
+      sessionUser: session?.user
+    });
+
+    switch (status) {
+      case 'authenticated':
+        if (session?.user?.id) {
+          console.log('✅ 有效的认证会话，用户信息:', {
+            id: session.user.id,
+            email: session.user.email,
+            role: session.user.role,
+            status: session.user.status,
+            createdAt: session.user.createdAt
+          });
+          setAuthChecked(true);
+          setRedirecting(false);
+        }
+        break;
+
+      case 'unauthenticated':
+        console.log('❌ 未认证状态，准备重定向');
+        if (!redirecting) {
+          setRedirecting(true);
+          setTimeout(() => {
+            router.push('/auth/signin');
+          }, 500);
+        }
+        break;
+
+      case 'loading':
+        console.log('⏳ 认证状态加载中...');
+        break;
+    }
+  }, [status, session, router, isClient, redirecting, updateSession]);
+
+  // 🔧 关键修复：完整的用户数据
+  const currentUser = useMemo(() => {
+    const rawUser = session?.user || user || serverSession?.user;
+    
+    if (!rawUser) {
+      console.log('❌ 没有用户数据');
+      return null;
+    }
+    
+    if (!rawUser.id || !rawUser.email) {
+      console.warn('❌ 用户数据不完整:', rawUser);
+      return null;
+    }
+    
+    // 🔧 构建完整的用户对象，确保所有字段都有安全的值
+    const completeUser = {
+      id: rawUser.id?.toString() || '',
+      email: rawUser.email || '',
+      name: rawUser.name || '用户',
+      image: rawUser.image || null,
+      role: rawUser.role || 'USER',
+      status: rawUser.status || 'ACTIVE',
+      createdAt: rawUser.createdAt || new Date().toISOString(),
+      updatedAt: rawUser.updatedAt || new Date().toISOString(),
+      lastLoginAt: rawUser.lastLoginAt || null,
+      emailVerified: rawUser.emailVerified || null,
+      preferences: rawUser.preferences || {}
+    };
+    
+    console.log('👤 构建完整用户对象:', {
+      id: completeUser.id,
+      email: completeUser.email,
+      role: completeUser.role,
+      status: completeUser.status,
+      hasCreatedAt: !!completeUser.createdAt,
+      hasLastLoginAt: !!completeUser.lastLoginAt
+    });
+    
+    return completeUser;
+  }, [session, user, serverSession]);
+
+  const isMobile = useDeviceDetection(isClient);
+
+  // 🔧 标签页初始化
   useEffect(() => {
     if (isClient && router.query.tab) {
-      const tab = safeGet(router, 'query.tab', '');
+      const tab = router.query.tab.toString();
       if (TAB_VALUES.includes(tab)) {
         setActiveTab(tab);
       }
     }
-  }, [router.query.tab, isClient, safeGet]);
+  }, [router.query.tab, isClient]);
 
-  // 响应式检测 - 使用安全调用
-  useEffect(() => {
-    if (isClient) {
-      const checkMobile = () => {
-        setIsMobile(safeGet(window, 'innerWidth', 1024) < 768);
-      };
-      
-      safeCall(checkMobile);
-      safeCall(() => window.addEventListener('resize', checkMobile));
-      
-      return () => {
-        safeCall(() => window.removeEventListener('resize', checkMobile));
-      };
-    }
-  }, [isClient, safeCall, safeGet]);
-
-  // 认证状态管理 - 使用安全数据访问
-  useEffect(() => {
-    if (!isClient || !isInitialized) return;
-
-    console.log('🔐 认证状态检查:', {
-      status,
-      hasServerSession: !!serverSession,
-      hasClientSession: !!clientSession
-    });
-
-    // 使用安全数据访问检查认证状态
-    const isUnauthenticated = status === 'unauthenticated';
-    const hasNoSession = !serverSession && !safeGet(clientSession, 'user');
-    
-    if (isUnauthenticated && hasNoSession) {
-      console.log('🔐 未认证用户，重定向到登录页');
-      safeCall(() => router.replace('/auth/signin'));
-      return;
-    }
-
-    // 安全地处理错误
-    if (error) {
-      console.warn('⚠️ 仪表板存在错误:', error);
-    }
-  }, [status, router, isClient, serverSession, clientSession, error, isInitialized, safeCall, safeGet]);
-
-  // 修复退出登录处理函数 - 使用安全调用
-  const handleLogout = useCallback(async () => {
-    if (isLoggingOut) return;
-    
-    setIsLoggingOut(true);
-    console.log('🚪 开始退出登录...');
-    
-    try {
-      // 安全地动态导入
-      const { signOut } = await import('next-auth/react');
-      console.log('🔧 调用 NextAuth signOut...');
-      
-      await safeCall(signOut, { 
-        callbackUrl: '/auth/signin?logout=success',
-        redirect: true 
-      });
-      
-    } catch (error) {
-      console.error('❌ NextAuth 退出失败:', error);
-      
-      // 安全地备用方案
-      if (typeof window !== 'undefined') {
-        safeCall(() => {
-          window.location.href = '/auth/signin?logout=success&direct=true';
-        });
-      }
-    } finally {
-      setIsLoggingOut(false);
-    }
-  }, [isLoggingOut, safeCall]);
-
-  // 标签页切换 - 使用安全调用
+  // 🔧 安全的标签页切换
   const handleTabChange = useCallback((tab) => {
     if (!isClient || !TAB_VALUES.includes(tab)) return;
     
     setActiveTab(tab);
     
-    // 安全地更新URL
-    safeCall(() => {
-      try {
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set('tab', tab);
-        window.history.replaceState({}, '', newUrl);
-      } catch (error) {
-        console.warn('🔧 URL更新失败:', error);
-      }
+    const newQuery = { ...router.query, tab };
+    router.replace(
+      { pathname: router.pathname, query: newQuery },
+      undefined,
+      { shallow: true, scroll: false }
+    ).catch(error => {
+      console.error('标签页切换错误:', error);
     });
-  }, [isClient, safeCall]);
+  }, [router, isClient]);
 
-  // 🔧 使用安全用户钩子获取用户数据
-  const currentUser = useSafeUser(
-    useMemo(() => {
-      try {
-        const session = clientSession || serverSession;
-        return safeGet(session, 'user', null);
-      } catch (err) {
-        console.error('❌ 获取用户数据时出错:', err);
-        return null;
+  // 🔧 安全的登出处理
+  const handleLogout = useCallback(async () => {
+    if (isLoggingOut) return;
+    
+    setIsLoggingOut(true);
+    try {
+      console.log('🚪 开始登出流程');
+      
+      if (typeof window !== 'undefined') {
+        localStorage.clear();
+        sessionStorage.clear();
       }
-    }, [clientSession, serverSession, safeGet])
-  );
+      
+      await logout();
+      
+      console.log('✅ 登出成功');
+      
+      setTimeout(() => {
+        window.location.href = '/auth/signin?logout=success';
+      }, 500);
+      
+    } catch (error) {
+      console.error('登出错误:', error);
+      setIsLoggingOut(false);
+      
+      setTimeout(() => {
+        window.location.href = '/auth/signin?logout=error';
+      }, 500);
+    }
+  }, [logout, isLoggingOut]);
 
-  // 渲染当前标签页 - 使用安全数据访问
+  // 🔧 渲染当前活动标签页
   const renderActiveTab = useMemo(() => {
-    if (!isClient || !isInitialized) {
+    if (!isClient) {
       return (
         <div className="min-h-96 flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-2 text-gray-600">初始化中...</p>
-          </div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
       );
     }
 
-    const tabConfig = safeGet(TAB_CONFIG, activeTab, null);
+    const tabConfig = TAB_CONFIG[activeTab];
     if (!tabConfig) {
       return (
         <div className="p-6 text-center text-gray-500">
-          <div className="text-4xl mb-4">❓</div>
-          <h3 className="text-lg font-medium mb-2">标签页不存在</h3>
-          <p>请选择有效的标签页</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">标签页不存在</h3>
           <button
-            onClick={() => handleTabChange(TABS.OVERVIEW)}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            onClick={() => handleTabChange(CONFIG.TABS.OVERVIEW)}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             返回概览
           </button>
@@ -265,199 +286,156 @@ export default function Dashboard({ session: serverSession, error: serverError }
       );
     }
 
-    const TabComponent = safeGet(tabConfig, 'component', null);
+    const TabComponent = tabConfig.component;
     
-    if (!TabComponent) {
-      return (
-        <div className="p-6 text-center text-red-500">
-          <div className="text-4xl mb-4">❌</div>
-          <h3 className="text-lg font-medium mb-2">组件加载失败</h3>
-          <p>无法加载标签页组件</p>
-        </div>
-      );
+    let tabProps = { user: currentUser };
+    
+    switch (activeTab) {
+      case CONFIG.TABS.CHAT:
+        tabProps = { ...tabProps, voiceEnabled, toggleVoice };
+        break;
+      case CONFIG.TABS.SETTINGS:
+        tabProps = { 
+          ...tabProps, 
+          isLoggingOut, 
+          handleLogout, 
+          voiceEnabled, 
+          toggleVoice 
+        };
+        break;
+      default:
+        break;
     }
 
-    try {
-      // 为不同标签页传递适当的props - 使用安全数据
-      const tabProps = {
-        user: currentUser,
-        onTabChange: handleTabChange
-      };
+    return <TabComponent {...tabProps} />;
+  }, [
+    activeTab, 
+    currentUser,
+    voiceEnabled, 
+    toggleVoice, 
+    isLoggingOut, 
+    handleLogout, 
+    isClient, 
+    handleTabChange
+  ]);
 
-      // 特定标签页的props
-      switch (activeTab) {
-        case TABS.CHAT:
-          return <TabComponent {...tabProps} />;
-        case TABS.SETTINGS:
-          return (
-            <TabComponent 
-              {...tabProps}
-              isLoggingOut={isLoggingOut} 
-              onLogout={handleLogout} 
-            />
-          );
-        default:
-          return <TabComponent {...tabProps} />;
-      }
-    } catch (err) {
-      console.error(`❌ 渲染标签页 ${activeTab} 时出错:`, err);
-      
-      return (
-        <div className="p-6">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-            <div className="flex items-start">
-              <div className="text-red-400 text-2xl mr-3">❌</div>
-              <div>
-                <h3 className="text-red-800 font-semibold mb-2">组件加载失败</h3>
-                <p className="text-red-700 mb-4">
-                  {safeGet(err, 'message', '加载组件时发生未知错误')}
-                </p>
-                <div className="space-x-3">
-                  <button
-                    onClick={() => safeCall(() => window.location.reload())}
-                    className="bg-red-100 text-red-800 px-4 py-2 rounded text-sm hover:bg-red-200 transition-colors"
-                  >
-                    刷新页面
-                  </button>
-                  <button
-                    onClick={() => handleTabChange(TABS.OVERVIEW)}
-                    className="bg-gray-100 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-200 transition-colors"
-                  >
-                    返回概览
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-  }, [activeTab, isLoggingOut, handleLogout, isClient, handleTabChange, currentUser, isInitialized, safeGet, safeCall]);
-
-  // 页面标题 - 使用安全数据访问
   const pageTitle = useMemo(() => {
-    const tabTitle = safeGet(TAB_CONFIG, `${activeTab}.title`, '控制台');
+    const tabTitle = TAB_CONFIG[activeTab]?.title || '控制台';
     return `${tabTitle} - AI项目平台`;
-  }, [activeTab, safeGet]);
+  }, [activeTab]);
 
-  // 处理重试 - 使用安全调用
-  const handleRetry = useCallback(() => {
-    safeCall(() => window.location.reload());
-  }, [safeCall]);
-
-  // 处理返回安全页 - 使用安全调用
-  const handleBackToSafety = useCallback(() => {
-    safeCall(() => router.push('/auth/signin'));
-  }, [router, safeCall]);
-
-  // 服务器错误处理
-  if (serverError) {
+  if (!isClient || status === 'loading' || userLoading) {
     return (
-      <ErrorDisplay
-        title="服务器错误"
-        message={serverError}
-        onRetry={handleRetry}
-        onBack={handleBackToSafety}
+      <LoadingSpinner 
+        message="正在验证您的身份..." 
+        subMessage={`状态: ${status}`}
       />
     );
   }
 
-  // 客户端加载状态
-  if (!isClient || !isInitialized) {
-    return <LoadingSpinner message="初始化客户端环境..." />;
-  }
-
-  // 认证状态检查 - 使用安全数据访问
-  const isAuthenticated = safeGet(currentUser, 'isAuthenticated', false) && safeGet(currentUser, 'id', '') !== 'unknown';
-  const stillLoading = status === 'loading';
-
-  if (stillLoading && !serverSession) {
-    return <LoadingSpinner message="验证用户会话..." />;
-  }
-
-  if (!isAuthenticated && status === 'unauthenticated') {
+  if (status === 'unauthenticated' && !redirecting) {
     return (
-      <ErrorDisplay
-        title="认证失败"
-        message="无法验证您的登录状态，请重新登录"
-        onRetry={handleRetry}
-        onBack={handleBackToSafety}
+      <LoadingSpinner 
+        message="正在验证用户身份..." 
+        subMessage="即将重定向到登录页面"
       />
     );
   }
 
-  // 主渲染
+  if (!currentUser && authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md">
+          <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-yellow-600 text-2xl">⚠️</span>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">用户数据加载失败</h3>
+          <p className="text-gray-600 mb-4">无法加载用户信息，请重新登录</p>
+          <button
+            onClick={() => window.location.href = '/auth/signin'}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            重新登录
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (redirecting) {
+    return (
+      <LoadingSpinner 
+        message="重定向中..." 
+        subMessage="正在跳转到登录页面"
+      />
+    );
+  }
+
+  console.log('🎉 渲染 Dashboard 主界面', {
+    user: currentUser?.name || '未知用户',
+    userId: currentUser?.id,
+    activeTab,
+    isMobile,
+    status
+  });
+
   return (
     <>
       <Head>
         <title>{pageTitle}</title>
-        <meta name="description" content="AI项目平台控制面板" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <meta name="theme-color" content="#3B82F6" />
+        <meta name="description" content={TAB_CONFIG[activeTab]?.description || "AI项目平台控制面板"} />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </Head>
 
-      <DashboardErrorBoundary>
-        <SafeDashboardLayout 
+      <KnowledgeProvider>
+        <DashboardLayout 
           user={currentUser} 
           activeTab={activeTab} 
           setActiveTab={handleTabChange} 
           isMobile={isMobile}
           onLogout={handleLogout}
           isLoggingOut={isLoggingOut}
+          availableTabs={CONFIG.TABS}
+          tabConfig={TAB_CONFIG}
         >
           {renderActiveTab}
-        </SafeDashboardLayout>
-      </DashboardErrorBoundary>
+        </DashboardLayout>
+      </KnowledgeProvider>
     </>
   );
 }
 
-// 服务器端渲染 - 增强错误处理
 export async function getServerSideProps(context) {
-  const startTime = Date.now();
-  const requestId = Math.random().toString(36).substring(2, 11);
-  
-  console.log(`🔍 [${requestId}] 开始服务器端渲染仪表板`);
-  
   try {
-    // 使用缓存的会话获取
-    const { getCachedServerSession } = await import('../lib/sessionWrapper');
-    const session = await getCachedServerSession(context.req, context.res);
+    const { getServerSession } = await import('next-auth/next');
+    const authModule = await import('../lib/auth');
+    const authOptions = authModule.authOptions || authModule.default;
+    
+    const session = await getServerSession(context.req, context.res, authOptions);
 
-    if (!session?.user) {
-      console.log(`🚫 [${requestId}] 无有效会话，重定向到登录页`);
-      return {
-        redirect: {
-          destination: '/auth/signin',
-          permanent: false,
-        },
-      };
-    }
-
-    // 验证会话数据完整性
-    if (!session.user.id || !session.user.email) {
-      console.warn(`⚠️ [${requestId}] 会话数据不完整:`, session.user);
-      return {
-        redirect: {
-          destination: '/auth/signin?error=invalid_session',
-          permanent: false,
-        },
-      };
-    }
-
-    // 确保返回的用户数据包含所有必需字段
-    const safeSession = {
+    // 🔧 关键修复：在服务器端也返回完整的用户信息
+    const safeSession = session ? {
       user: {
-        id: session.user.id.toString() || 'unknown',
-        name: session.user.name || '用户',
-        email: session.user.email || '',
-        image: session.user.image || null,
-        role: session.user.role || 'USER'
+        id: session.user?.id?.toString() || '',
+        email: session.user?.email || '',
+        name: session.user?.name || '用户',
+        image: session.user?.image || null,
+        role: session.user?.role || 'USER',
+        status: session.user?.status || 'ACTIVE',
+        createdAt: session.user?.createdAt || new Date().toISOString(),
+        updatedAt: session.user?.updatedAt || new Date().toISOString(),
+        lastLoginAt: session.user?.lastLoginAt || null,
+        emailVerified: session.user?.emailVerified || null,
+        preferences: session.user?.preferences || {}
       }
-    };
+    } : null;
 
-    const duration = Date.now() - startTime;
-    console.log(`✅ [${requestId}] 服务器端渲染完成 (${duration}ms)`);
+    console.log('🔍 服务器端会话信息:', {
+      hasSession: !!safeSession,
+      userId: safeSession?.user?.id,
+      userEmail: safeSession?.user?.email,
+      userRole: safeSession?.user?.role
+    });
 
     return {
       props: { 
@@ -465,20 +443,9 @@ export async function getServerSideProps(context) {
       },
     };
   } catch (error) {
-    console.error(`❌ [${requestId}] 仪表板服务器端错误:`, error);
-    
-    const errorMessage = process.env.NODE_ENV === 'development' 
-      ? `开发模式错误: ${error.message}`
-      : '服务器暂时不可用，请稍后重试';
-    
+    console.error('Dashboard 服务器端错误:', error);
     return {
-      props: { 
-        session: null,
-        error: errorMessage
-      },
+      props: { session: null },
     };
   }
 }
-
-// 设置显示名称
-Dashboard.displayName = 'DashboardPage';

@@ -1,0 +1,245 @@
+// src/pages/dashboard.js - 使用自定义 useSession 的版本
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/router';
+import { useSession } from '../hooks/useSession';
+import DashboardLayout from '../components/DashboardLayout';
+import Head from 'next/head';
+
+// 简单的标签页内容组件
+const TabContent = ({ tabId, user }) => {
+  const content = {
+    overview: {
+      title: '概览',
+      content: '欢迎使用 AI 项目平台控制面板'
+    },
+    projects: {
+      title: '项目管理', 
+      content: '在这里管理您的项目'
+    },
+    chat: {
+      title: 'AI 对话',
+      content: '与 AI 助手进行对话'
+    },
+    knowledge: {
+      title: '知识库',
+      content: '管理您的知识库内容'
+    },
+    settings: {
+      title: '设置',
+      content: '账户和系统设置'
+    }
+  };
+
+  const currentTab = content[tabId] || content.overview;
+
+  return (
+    <div className="p-6 bg-white rounded-lg shadow">
+      <h2 className="text-2xl font-semibold mb-4">{currentTab.title}</h2>
+      <div className="space-y-4">
+        <p>{currentTab.content}</p>
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded">
+          <p className="text-blue-700">
+            <strong>用户信息:</strong> {user?.name} ({user?.email})
+          </p>
+          <p className="text-blue-600 text-sm mt-1">
+            角色: {user?.role} | ID: {user?.id}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default function Dashboard() {
+  const router = useRouter();
+  const { data: session, loading, error, authenticated, user } = useSession();
+  
+  const [activeTab, setActiveTab] = useState('overview');
+  const [isClient, setIsClient] = useState(false);
+
+  // 安全的客户端检测
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // 安全的标签页初始化
+  useEffect(() => {
+    if (isClient && router.query.tab) {
+      const tab = router.query.tab.toString();
+      if (['overview', 'projects', 'chat', 'knowledge', 'settings'].includes(tab)) {
+        setActiveTab(tab);
+      }
+    }
+  }, [router.query.tab, isClient]);
+
+  // 标签页切换处理
+  const handleTabChange = useCallback((tab) => {
+    if (!isClient) return;
+    
+    setActiveTab(tab);
+    
+    try {
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.set('tab', tab);
+      window.history.replaceState({}, '', newUrl);
+    } catch (error) {
+      console.warn('URL更新失败:', error);
+    }
+  }, [isClient]);
+
+  // 安全的用户数据
+  const currentUser = useMemo(() => {
+    try {
+      if (!user) {
+        return createSafeUser('no-user-data');
+      }
+
+      const safeUser = {
+        id: String(user.id || 'unknown'),
+        name: String(user.name || '用户'),
+        email: String(user.email || ''),
+        image: user.image || null,
+        role: String(user.role || 'USER'),
+        isAuthenticated: authenticated
+      };
+
+      return safeUser;
+
+    } catch (err) {
+      console.error('获取用户数据时出错:', err);
+      return createSafeUser('error');
+    }
+  }, [user, authenticated]);
+
+  // 创建安全的用户对象辅助函数
+  const createSafeUser = (reason = 'default') => ({
+    id: `safe-${reason}-${Date.now()}`,
+    name: '用户',
+    email: '',
+    image: null,
+    role: 'USER',
+    isAuthenticated: false,
+    _safeReason: reason
+  });
+
+  // 页面标题
+  const pageTitle = useMemo(() => {
+    const titles = {
+      overview: '概览',
+      projects: '项目',
+      chat: 'AI对话',
+      knowledge: '知识库',
+      settings: '设置'
+    };
+    const tabTitle = titles[activeTab] || '控制台';
+    return `${tabTitle} - AI项目平台`;
+  }, [activeTab]);
+
+  // 认证状态检查
+  useEffect(() => {
+    if (!isClient) return;
+
+    if (!loading && !authenticated) {
+      console.log('🔐 未认证用户，重定向到登录页');
+      const currentPath = window.location.pathname + window.location.search;
+      const redirectUrl = `/auth/signin?callbackUrl=${encodeURIComponent(currentPath)}`;
+      router.replace(redirectUrl);
+      return;
+    }
+  }, [authenticated, loading, router, isClient]);
+
+  // 处理重试
+  const handleRetry = useCallback(() => {
+    window.location.reload();
+  }, []);
+
+  // 处理返回登录页
+  const handleBackToLogin = useCallback(() => {
+    router.push('/auth/signin');
+  }, [router]);
+
+  // 加载状态
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">验证用户会话...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 错误状态
+  if (error && !authenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">认证失败</h2>
+          <p className="text-gray-600 mb-6">无法验证您的登录状态，请重新登录</p>
+          <div className="space-y-3">
+            <button
+              onClick={handleRetry}
+              className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              重试
+            </button>
+            <button
+              onClick={handleBackToLogin}
+              className="w-full bg-gray-600 text-white py-3 rounded-lg hover:bg-gray-700 transition-colors font-medium"
+            >
+              返回登录页
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 未认证状态
+  if (!authenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
+          <div className="text-red-500 text-6xl mb-4">🔐</div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">需要登录</h2>
+          <p className="text-gray-600 mb-6">请先登录以访问仪表板</p>
+          <button
+            onClick={handleBackToLogin}
+            className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+          >
+            去登录
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 主渲染
+  return (
+    <>
+      <Head>
+        <title>{pageTitle}</title>
+        <meta name="description" content="AI项目平台控制面板" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+      </Head>
+
+      <DashboardLayout 
+        user={currentUser}
+        activeTab={activeTab}
+        setActiveTab={handleTabChange}
+        onLogout={() => {}} // 在 DashboardLayout 中已经处理
+      >
+        <TabContent tabId={activeTab} user={currentUser} />
+      </DashboardLayout>
+    </>
+  );
+}
+
+// 禁用服务器端预渲染
+export async function getServerSideProps() {
+  return {
+    props: {},
+  };
+}

@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: '未经授权的访问' })
   }
 
-  const userId = parseInt(session.user.id)
+  const userId = session.user?.id
   const conversationId = req.query.id
 
   // 验证对话ID格式

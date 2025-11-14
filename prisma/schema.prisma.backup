@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,43 +8,43 @@ datasource db {
 }
 
 model User {
-  id            Int          @id @default(autoincrement())
-  email         String       @unique
-  name          String?
-  password      String?
-  emailVerified DateTime?
-  image         String?
-  role          String?
-  status        Boolean      @default(true)
-  // 审计
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-
-  // 关系
-  accounts      Account[]
-  sessions      Session[]
-  files         File[]
-  knowledges    Knowledge[]
-  conversations Conversation[]
+  id             Int             @id @default(autoincrement())
+  email          String          @unique
+  name           String?
+  password       String?
+  emailVerified  DateTime?
+  image          String?
+  role           String?
+  status         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  lastLoginAt    DateTime?       @default(now())
+  preferences    Json?
+  accounts       Account[]
+  files          File[]
+  knowledges     Knowledge[]
+  projectMembers ProjectMember[]
+  sessions       Session[]
+  conversations  Conversation[]
+  projects       Project[]
 
   @@map("users")
 }
 
 model Account {
-  id                 String   @id @default(cuid())
-  userId             Int
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String?
-  access_token       String?
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String?
-  session_state      String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String  @id @default(cuid())
+  userId            Int
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -56,8 +54,7 @@ model Session {
   sessionToken String   @unique
   userId       Int
   expires      DateTime
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model VerificationToken {
@@ -77,24 +74,23 @@ model File {
   mimeType  String
   url       String
   createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model Knowledge {
-  id        String   @id @default(cuid())
-  title     String?
-  content   String
-  category  String
-  tags      String
-  source    String
-  userId    Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String    @id @default(cuid())
+  title             String?
+  content           String
+  category          String
+  tags              String
+  source            String
+  userId            Int
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generatedProjects Project[] @relation("KnowledgeGeneratedProjects")
 
   @@index([userId])
   @@index([category])
@@ -107,10 +103,48 @@ model Conversation {
   userId    Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  metadata  Json?    // 存储模式等信息
-  
-  // 关系 - 必须在字段定义之后
+  metadata  Json?
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@map("conversations")
+}
+
+model Project {
+  id                String          @id @default(cuid())
+  title             String
+  description       String?
+  status            String          @default("DRAFT")
+  ownerId           Int
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  content           String?
+  knowledgeSourceId String?
+  type              String          @default("STANDARD_PROJECT")
+  visibility        String          @default("PRIVATE")
+  projectMembers    ProjectMember[]
+  knowledgeSource   Knowledge?      @relation("KnowledgeGeneratedProjects", fields: [knowledgeSourceId], references: [id])
+  owner             User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([type])
+  @@index([status])
+  @@index([visibility])
+  @@index([knowledgeSourceId])
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    Int
+  role      String   @default("MEMBER")
+  joinedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+  @@index([role])
 }

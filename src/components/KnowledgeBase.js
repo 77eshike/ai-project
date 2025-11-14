@@ -1,9 +1,11 @@
-// components/KnowledgeBase.js
-import { useState, useEffect } from 'react';
+// components/KnowledgeBase.js - 修复版本
+import { useState, useEffect, useMemo } from 'react';
 import { useKnowledge } from '../contexts/KnowledgeContext';
 import KnowledgeList from './KnowledgeList';
 import KnowledgeFilters from './KnowledgeFilters';
 import KnowledgeEditor from './KnowledgeEditor';
+import KnowledgeDetail from './KnowledgeDetail';
+import QuickCreateButton from './QuickCreateButton';
 import { 
   PlusIcon, 
   DocumentTextIcon,
@@ -13,48 +15,104 @@ import {
 } from '@heroicons/react/24/outline';
 
 export default function KnowledgeBase() {
+  // 🔧 关键修复：安全解构，提供默认值
+  const knowledgeContext = useKnowledge();
+  
   const { 
-    isLoading, 
-    getFilteredKnowledge, 
-    knowledgeItems,
-    searchQuery,
-    setSearchQuery,
-    addKnowledge 
-  } = useKnowledge();
+    isLoading = false, 
+    filteredKnowledgeItems = [],
+    knowledgeItems = [],
+    searchQuery = '',
+    setSearchQuery = () => {},
+    addKnowledge = () => Promise.reject(new Error('addKnowledge not available')),
+    updateKnowledge = () => Promise.reject(new Error('updateKnowledge not available')),
+    setEditingKnowledge = () => console.warn('setEditingKnowledge not available'),
+    clearEditingKnowledge = () => console.warn('clearEditingKnowledge not available'),
+    editingKnowledge = null
+  } = knowledgeContext || {};
   
+  // 🔧 关键修复：添加独立的状态控制编辑器
   const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' 或 'list'
   const [localSearch, setLocalSearch] = useState('');
-  
-  const filteredItems = getFilteredKnowledge();
+  const [error, setError] = useState('');
+  const [viewingDetail, setViewingDetail] = useState(null);
+  const [viewMode, setViewMode] = useState('grid');
+
+  // 🔧 修复：使用 filteredKnowledgeItems 而不是重新计算
+  const filteredItems = filteredKnowledgeItems;
 
   // 同步本地搜索和全局搜索
   useEffect(() => {
     const timer = setTimeout(() => {
-      setSearchQuery(localSearch);
+      try {
+        setSearchQuery(localSearch);
+      } catch (error) {
+        console.error('设置搜索查询失败:', error);
+        setError('搜索功能暂时不可用');
+      }
     }, 300);
     
     return () => clearTimeout(timer);
   }, [localSearch, setSearchQuery]);
 
+  // 🔧 关键修复：修改新建知识点函数
   const handleNewKnowledge = () => {
-    setEditingItem(null);
+    console.log('🎯 点击新建知识点按钮');
+    setEditingKnowledge(null);
     setIsEditorOpen(true);
   };
 
   const handleEditKnowledge = (item) => {
-    setEditingItem(item);
+    console.log('✏️ 编辑知识点:', item?.id);
+    setEditingKnowledge(item);
     setIsEditorOpen(true);
   };
 
-  const handleCloseEditor = () => {
-    setIsEditorOpen(false);
-    setEditingItem(null);
+  const handleViewDetail = (item) => {
+    setViewingDetail(item);
   };
 
-  // 快速创建示例数据
-  const handleAddSampleData = () => {
+  const handleCloseDetail = () => {
+    setViewingDetail(null);
+  };
+
+  // 🔧 关键修复：添加保存处理函数
+  const handleSaveKnowledge = async (id, knowledgeData) => {
+    try {
+      let result;
+      if (id && id.startsWith('temp-')) {
+        console.log('🔄 保存临时知识点:', id);
+        result = await addKnowledge(knowledgeData);
+      } else {
+        console.log('✏️ 更新现有知识点:', id);
+        result = await updateKnowledge(id, knowledgeData);
+      }
+      
+      if (result?.success) {
+        console.log('✅ 保存成功');
+        handleCloseEditor();
+        return result;
+      } else {
+        throw new Error(result?.error || '保存操作未成功');
+      }
+    } catch (error) {
+      console.error('保存失败:', error);
+      setError('保存失败: ' + error.message);
+      throw error;
+    }
+  };
+
+  // 🔧 关键修复：修改关闭编辑器函数
+  const handleCloseEditor = () => {
+    console.log('❌ 关闭编辑器');
+    setIsEditorOpen(false);
+    setEditingKnowledge(null);
+    clearEditingKnowledge();
+    setError('');
+  };
+
+  // 🔧 安全添加示例数据
+  const handleAddSampleData = async () => {
     const sampleItems = [
       {
         title: 'React最佳实践',
@@ -79,22 +137,76 @@ export default function KnowledgeBase() {
       }
     ];
 
-    sampleItems.forEach(item => {
-      addKnowledge(item);
-    });
+    try {
+      setError('');
+      for (const item of sampleItems) {
+        await addKnowledge(item);
+      }
+      // 显示成功消息
+      if (typeof window !== 'undefined') {
+        alert('示例数据添加成功！');
+      }
+    } catch (error) {
+      console.error('添加示例数据失败:', error);
+      setError('添加示例数据失败: ' + error.message);
+    }
   };
 
-  // 统计信息
-  const stats = {
-    total: knowledgeItems.length,
-    technical: knowledgeItems.filter(item => item.category === '技术').length,
-    process: knowledgeItems.filter(item => item.category === '流程').length,
-    recent: knowledgeItems.filter(item => {
-      const oneWeekAgo = new Date();
-      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-      return new Date(item.createdAt) > oneWeekAgo;
-    }).length
-  };
+  // 🔧 安全统计信息
+  const stats = useMemo(() => {
+    try {
+      return {
+        total: knowledgeItems.length,
+        technical: knowledgeItems.filter(item => item.category === '技术').length,
+        process: knowledgeItems.filter(item => item.category === '流程').length,
+        product: knowledgeItems.filter(item => item.category === '产品').length,
+        recent: knowledgeItems.filter(item => {
+          try {
+            const oneWeekAgo = new Date();
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            return new Date(item.createdAt) > oneWeekAgo;
+          } catch {
+            return false;
+          }
+        }).length
+      };
+    } catch (error) {
+      console.error('计算统计信息失败:', error);
+      return { total: 0, technical: 0, process: 0, product: 0, recent: 0 };
+    }
+  }, [knowledgeItems]);
+
+  // 🔧 调试信息
+  useEffect(() => {
+    console.log('📊 KnowledgeBase 状态:', {
+      总数据条数: knowledgeItems.length,
+      过滤后条数: filteredItems.length,
+      加载中: isLoading,
+      编辑器打开: isEditorOpen,
+      编辑项: editingKnowledge?.id,
+      搜索词: searchQuery,
+      上下文可用: !!knowledgeContext
+    });
+  }, [knowledgeItems.length, filteredItems.length, isLoading, isEditorOpen, editingItem, searchQuery, knowledgeContext]);
+
+  // 🔧 关键修复：检查 Context 可用性
+  if (!knowledgeContext) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h3 className="text-xl font-medium text-gray-900 mb-2">系统配置错误</h3>
+          <p className="text-gray-600 mb-4">知识库功能暂时不可用，请刷新页面或联系管理员</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            刷新页面
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
@@ -108,6 +220,19 @@ export default function KnowledgeBase() {
                 <h1 className="text-2xl font-bold text-gray-900">知识库</h1>
               </div>
               <p className="text-gray-600">集中管理所有重要信息和知识点</p>
+              
+              {/* 错误显示 */}
+              {error && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-center">
+                    <svg className="w-5 h-5 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-red-800 font-medium">错误</span>
+                  </div>
+                  <p className="text-red-700 text-sm mt-1">{error}</p>
+                </div>
+              )}
               
               {/* 快速统计 */}
               <div className="flex flex-wrap gap-4 mt-4">
@@ -133,14 +258,20 @@ export default function KnowledgeBase() {
             <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
               <button
                 onClick={handleAddSampleData}
-                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center"
+                disabled={isLoading}
+                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
                 <ArrowUpTrayIcon className="h-4 w-4 mr-2" />
                 添加示例数据
               </button>
+              
+              {/* 添加快速新建按钮 */}
+              <QuickCreateButton />
+              
               <button
                 onClick={handleNewKnowledge}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+                disabled={isLoading}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center disabled:bg-blue-400 disabled:cursor-not-allowed"
               >
                 <PlusIcon className="h-4 w-4 mr-2" />
                 新建知识点
@@ -163,6 +294,7 @@ export default function KnowledgeBase() {
                 onChange={(e) => setLocalSearch(e.target.value)}
                 placeholder="搜索知识点标题、内容或标签..."
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={isLoading}
               />
             </div>
             
@@ -172,11 +304,12 @@ export default function KnowledgeBase() {
               <div className="flex bg-gray-100 rounded-lg p-1">
                 <button
                   onClick={() => setViewMode('grid')}
+                  disabled={isLoading}
                   className={`p-2 rounded-md ${
                     viewMode === 'grid' 
                       ? 'bg-white text-blue-600 shadow-sm' 
                       : 'text-gray-600 hover:text-gray-900'
-                  }`}
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
@@ -184,11 +317,12 @@ export default function KnowledgeBase() {
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
+                  disabled={isLoading}
                   className={`p-2 rounded-md ${
                     viewMode === 'list' 
                       ? 'bg-white text-blue-600 shadow-sm' 
                       : 'text-gray-600 hover:text-gray-900'
-                  }`}
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -234,12 +368,15 @@ export default function KnowledgeBase() {
                 }
               </p>
               {!searchQuery && (
-                <button
-                  onClick={handleNewKnowledge}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  创建第一个知识点
-                </button>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <button
+                    onClick={handleNewKnowledge}
+                    className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+                  >
+                    <PlusIcon className="h-5 w-5 mr-2" />
+                    创建第一个知识点
+                  </button>
+                </div>
               )}
             </div>
           ) : (
@@ -247,16 +384,26 @@ export default function KnowledgeBase() {
               items={filteredItems} 
               viewMode={viewMode}
               onEdit={handleEditKnowledge}
+              onViewDetail={handleViewDetail}
             />
           )}
         </div>
       </div>
       
-      {/* 编辑器模态框 */}
+      {/* 🔧 关键修复：修改编辑器渲染条件 */}
       {isEditorOpen && (
         <KnowledgeEditor 
-          item={editingItem}
+          item={editingKnowledge}
+          onSave={handleSaveKnowledge}
           onClose={handleCloseEditor}
+        />
+      )}
+
+      {/* 详情查看模态框 */}
+      {viewingDetail && (
+        <KnowledgeDetail 
+          item={viewingDetail}
+          onClose={handleCloseDetail}
         />
       )}
     </div>

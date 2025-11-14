@@ -13,7 +13,7 @@ export default async function handler(req, res) {
 
   try {
     const { content, ideaId, messageType } = req.body;
-    const userId = parseInt(session.user.id);
+    const userId = session.user?.id;
 
     if (!content) {
       return res.status(400).json({ error: '消息内容不能为空' });

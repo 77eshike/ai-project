@@ -1,5 +1,5 @@
 // src/components/DashboardHotfix.js - 完整修复版本
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * 仪表板热修复组件
@@ -8,6 +8,7 @@ import { useEffect, useRef } from 'react';
  */
 export function useDashboardHotfix() {
   const isApplied = useRef(false);
+  const [isProduction, setIsProduction] = useState(false);
 
   useEffect(() => {
     // 防止重复应用
@@ -16,7 +17,17 @@ export function useDashboardHotfix() {
     }
     isApplied.current = true;
 
-    console.log('🔧 DashboardHotfix: 应用热修复补丁');
+    // 安全地检测生产环境
+    const checkIsProduction = () => {
+      if (typeof window === 'undefined') return false;
+      return window.location.hostname !== 'localhost' && 
+             window.location.hostname !== '127.0.0.1' &&
+             !window.location.hostname.includes('.local') &&
+             window.location.port !== '3000';
+    };
+
+    setIsProduction(checkIsProduction());
+    console.log('🔧 DashboardHotfix: 应用热修复补丁', { isProduction: checkIsProduction() });
 
     // 保存原始控制台方法
     const originalError = console.error;
@@ -99,7 +110,7 @@ export function useDashboardHotfix() {
     };
 
     // 可选：过滤开发日志
-    if (process.env.NODE_ENV === 'production') {
+    if (isProduction) {
       console.log = function(...args) {
         const message = args[0]?.toString() || '';
         
@@ -359,7 +370,21 @@ export function useSessionMonitor() {
  */
 export function usePerformanceMonitor(componentName) {
   const startTime = useRef(performance.now());
-  
+  const [isDevelopment, setIsDevelopment] = useState(false);
+
+  useEffect(() => {
+    // 安全地检测开发环境
+    const checkIsDevelopment = () => {
+      if (typeof window === 'undefined') return false;
+      return window.location.hostname === 'localhost' || 
+             window.location.hostname === '127.0.0.1' ||
+             window.location.hostname.includes('.local') ||
+             window.location.port === '3000';
+    };
+
+    setIsDevelopment(checkIsDevelopment());
+  }, []);
+
   useEffect(() => {
     const loadTime = performance.now() - startTime.current;
     
@@ -368,12 +393,12 @@ export function usePerformanceMonitor(componentName) {
         loadTime: Math.round(loadTime),
         threshold: 1000
       });
-    } else if (process.env.NODE_ENV === 'development') {
+    } else if (isDevelopment) {
       console.log(`⚡ PerformanceMonitor[${componentName}]: 加载完成`, {
         loadTime: Math.round(loadTime)
       });
     }
-  }, [componentName]);
+  }, [componentName, isDevelopment]);
 }
 
 // ========== 工具函数 ==========

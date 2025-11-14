@@ -1,128 +1,240 @@
-// src/pages/api/projects/index.js - 修复版本
+// src/pages/api/projects/index.js - 修复String ID版本
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../lib/auth";
-import { getPrisma } from '../../../lib/prisma'; // 🔧 修复：使用 getPrisma
+import prisma from '../../../lib/prisma';
 
-export default async function handler(req, res) {
-  // 设置 CORS 头
+// 🔧 配置常量
+const CONFIG = {
+  ALLOWED_METHODS: ['GET', 'POST', 'OPTIONS'],
+  MAX_PROJECTS_PER_PAGE: 100,
+  DEFAULT_PAGE_SIZE: 20,
+  VALID_PROJECT_TYPES: ['STANDARD_PROJECT', 'RESEARCH_PROJECT', 'DEVELOPMENT_PROJECT'],
+  VALID_PROJECT_STATUSES: ['DRAFT', 'IN_PROGRESS', 'COMPLETED', 'ARCHIVED'],
+  VALID_SORT_FIELDS: ['createdAt', 'updatedAt', 'title'],
+  CACHE_CONTROL: 'private, no-cache, no-store, must-revalidate'
+};
+
+// 🔧 工具函数：设置响应头
+function setResponseHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', CONFIG.ALLOWED_METHODS.join(', '));
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Cache-Control', CONFIG.CACHE_CONTROL);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+}
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  console.log('🔍 项目API请求:', { 
-    method: req.method, 
-    url: req.url,
-    query: req.query 
-  });
-
+// 🔧 工具函数：验证用户会话 - 修复String ID处理
+async function validateSession(req, res) {
   try {
     const session = await getServerSession(req, res, authOptions);
     
+    console.log('🔐 会话验证详情:', {
+      hasSession: !!session,
+      hasUser: !!session?.user,
+      userId: session?.user?.id,
+      userEmail: session?.user?.email,
+      userIdType: typeof session?.user?.id
+    });
+
     if (!session?.user?.id) {
-      console.warn('🚫 未授权访问:', { hasSession: !!session, userId: session?.user?.id });
+      console.warn('🚫 未授权访问: 缺少有效的用户会话');
+      return { valid: false, error: '未经授权的访问', code: 'UNAUTHORIZED' };
+    }
+
+    // 🔧 修复：直接使用String ID，不进行数字转换
+    const userId = session.user.id;
+    
+    if (typeof userId !== 'string' || userId.trim().length === 0) {
+      console.error('❌ 无效的用户ID:', session.user.id);
+      return { valid: false, error: '无效的用户ID', code: 'INVALID_USER_ID' };
+    }
+
+    return { 
+      valid: true, 
+      userId, 
+      session
+    };
+  } catch (error) {
+    console.error('❌ 会话验证失败:', error);
+    return { 
+      valid: false, 
+      error: '会话验证失败', 
+      code: 'SESSION_VALIDATION_FAILED'
+    };
+  }
+}
+
+// 🔧 工具函数：验证查询参数
+function validateQueryParams(query) {
+  const { 
+    type, 
+    status, 
+    search,
+    page = 1, 
+    limit = CONFIG.DEFAULT_PAGE_SIZE,
+    sortBy = 'updatedAt',
+    sortOrder = 'desc'
+  } = query;
+
+  // 验证分页参数
+  const pageNum = Math.max(1, parseInt(page) || 1);
+  const limitNum = Math.min(
+    Math.max(1, parseInt(limit) || CONFIG.DEFAULT_PAGE_SIZE), 
+    CONFIG.MAX_PROJECTS_PER_PAGE
+  );
+
+  // 验证排序参数
+  const sortField = CONFIG.VALID_SORT_FIELDS.includes(sortBy) ? sortBy : 'updatedAt';
+  const sortDir = sortOrder === 'asc' ? 'asc' : 'desc';
+
+  // 验证过滤参数
+  const validatedType = type && CONFIG.VALID_PROJECT_TYPES.includes(type) ? type : undefined;
+  const validatedStatus = status && CONFIG.VALID_PROJECT_STATUSES.includes(status) ? status : undefined;
+  const validatedSearch = search && typeof search === 'string' && search.trim().length > 0 ? search.trim() : undefined;
+
+  return {
+    page: pageNum,
+    limit: limitNum,
+    skip: (pageNum - 1) * limitNum,
+    sortBy: sortField,
+    sortOrder: sortDir,
+    type: validatedType,
+    status: validatedStatus,
+    search: validatedSearch
+  };
+}
+
+// 🔧 简化的错误处理
+function handleApiError(error, requestId, res) {
+  console.error(`❌ [${requestId}] API错误:`, error.message);
+
+  // 处理 Prisma 错误
+  if (error.code?.startsWith('P')) {
+    switch (error.code) {
+      case 'P2025':
+        return res.status(404).json({ 
+          success: false,
+          error: '记录未找到',
+          requestId
+        });
+      case 'P1017':
+      case 'P1001':
+        return res.status(503).json({ 
+          success: false,
+          error: '数据库连接失败，请稍后重试',
+          requestId
+        });
+      case 'P2002':
+        return res.status(409).json({ 
+          success: false,
+          error: '记录已存在',
+          requestId
+        });
+      default:
+        return res.status(500).json({ 
+          success: false,
+          error: '数据库操作失败',
+          requestId,
+          ...(process.env.NODE_ENV === 'development' && { code: error.code })
+        });
+    }
+  }
+
+  // 通用错误处理
+  return res.status(500).json({ 
+    success: false,
+    error: '服务器内部错误',
+    requestId,
+    ...(process.env.NODE_ENV === 'development' && { details: error.message })
+  });
+}
+
+export default async function handler(req, res) {
+  const requestId = Math.random().toString(36).substr(2, 9);
+  
+  console.log(`🔍 [${requestId}] 项目API请求:`, { 
+    method: req.method, 
+    url: req.url,
+    query: req.query
+  });
+
+  // 设置响应头
+  setResponseHeaders(res);
+
+  if (req.method === 'OPTIONS') {
+    console.log(`✅ [${requestId}] OPTIONS 请求处理完成`);
+    return res.status(200).end();
+  }
+
+  try {
+    // 验证会话
+    const sessionValidation = await validateSession(req, res);
+    if (!sessionValidation.valid) {
+      console.warn(`🚫 [${requestId}] 会话验证失败:`, sessionValidation.error);
       return res.status(401).json({ 
         success: false,
-        error: '未经授权的访问' 
+        error: sessionValidation.error,
+        code: sessionValidation.code,
+        requestId
       });
     }
 
-    // 将用户 ID 转换为数字
-    const userId = parseInt(session.user.id);
-    if (isNaN(userId)) {
-      console.error('❌ 无效的用户ID:', session.user.id);
-      return res.status(400).json({ 
-        success: false,
-        error: '无效的用户ID' 
-      });
-    }
+    const { userId } = sessionValidation;
 
-    console.log('📂 项目API处理:', { 
+    console.log(`📂 [${requestId}] 项目API处理:`, { 
       method: req.method, 
       userId,
       path: req.url 
     });
 
-    // 🔧 修复：使用 getPrisma() 获取 Prisma 客户端
-    const prisma = await getPrisma();
-
-    // 获取项目列表
+    // 路由到对应的处理方法
     if (req.method === 'GET') {
-      return await getProjects(req, res, userId, prisma);
+      return await handleGetProjects(req, res, userId, requestId);
     }
 
-    // 创建新项目
     if (req.method === 'POST') {
-      return await createProject(req, res, userId, prisma);
+      return await handleCreateProject(req, res, userId, requestId);
     }
 
+    console.warn(`❌ [${requestId}] 不支持的方法: ${req.method}`);
     return res.status(405).json({ 
       success: false,
-      error: '方法不允许' 
+      error: '方法不允许',
+      allowed: CONFIG.ALLOWED_METHODS,
+      requestId
     });
 
   } catch (error) {
-    console.error('❌ 项目API错误:', {
-      message: error.message,
-      stack: error.stack,
-      code: error.code
-    });
-    
-    // 处理数据库连接错误
-    if (error.message.includes('数据库连接') || error.message.includes('Prisma')) {
-      return res.status(503).json({ 
-        success: false,
-        error: '数据库服务暂时不可用，请稍后重试',
-        code: 'DATABASE_UNAVAILABLE'
-      });
-    }
-    
-    return res.status(500).json({ 
-      success: false,
-      error: '服务器内部错误',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
-      code: process.env.NODE_ENV === 'development' ? error.code : undefined
-    });
+    console.error(`❌ [${requestId}] 项目API全局错误:`, error);
+    return handleApiError(error, requestId, res);
   }
 }
 
-// 获取项目列表
-async function getProjects(req, res, userId, prisma) {
+// 🔧 修复的获取项目列表函数
+async function handleGetProjects(req, res, userId, requestId) {
   try {
-    const { 
-      type, 
-      status, 
-      search,
-      page = 1, 
-      limit = 20,
-      sortBy = 'updatedAt',
-      sortOrder = 'desc'
-    } = req.query;
+    // 验证查询参数
+    const {
+      page,
+      limit,
+      skip,
+      sortBy,
+      sortOrder,
+      type,
+      status,
+      search
+    } = validateQueryParams(req.query);
 
-    console.log('🔍 查询参数:', { 
+    console.log(`🔍 [${requestId}] 查询参数:`, { 
       userId, 
-      type, 
-      status, 
-      search,
       page, 
-      limit 
+      limit,
+      sortBy,
+      sortOrder
     });
 
-    // 🔧 添加 Prisma 客户端验证
-    console.log('🔍 Prisma 客户端验证:', {
-      hasPrisma: !!prisma,
-      hasProject: !!prisma.project,
-      hasFindMany: typeof prisma.project?.findMany
-    });
-
-    if (!prisma || typeof prisma.project?.findMany !== 'function') {
-      throw new Error('Prisma 客户端未正确初始化');
-    }
-
-    // 构建安全的查询条件
+    // 构建查询条件
     const where = {
       OR: [
         { ownerId: userId },
@@ -130,74 +242,199 @@ async function getProjects(req, res, userId, prisma) {
       ]
     };
 
-    // ... 其余代码保持不变
-    // 安全地添加过滤条件
-    if (type && typeof type === 'string') {
-      const validTypes = ['DRAFT_PROJECT', 'STANDARD_PROJECT', 'TEAM_PROJECT', 'GENERAL'];
-      if (validTypes.includes(type)) {
-        where.type = type;
-      }
-    }
-
-    if (status && typeof status === 'string') {
-      const validStatuses = ['DRAFT', 'PUBLISHED', 'RECRUITING', 'IN_PROGRESS', 'COMPLETED', 'ARCHIVED'];
-      if (validStatuses.includes(status)) {
-        where.status = status;
-      }
-    }
-
-    if (search && typeof search === 'string' && search.trim().length > 0) {
+    // 添加过滤条件
+    if (type) where.type = type;
+    if (status) where.status = status;
+    if (search) {
       where.OR = [
         ...where.OR,
         { 
           title: { 
-            contains: search.trim(), 
+            contains: search, 
             mode: 'insensitive' 
           } 
         },
         { 
           description: { 
-            contains: search.trim(), 
+            contains: search, 
             mode: 'insensitive' 
           } 
         }
       ];
     }
 
-    // 验证分页参数
-    const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.min(Math.max(1, parseInt(limit) || 20), 100);
-    const skip = (pageNum - 1) * limitNum;
+    console.log(`📊 [${requestId}] 执行数据库查询...`);
 
-    // 验证排序参数
-    const validSortFields = ['createdAt', 'updatedAt', 'title'];
-    const sortField = validSortFields.includes(sortBy) ? sortBy : 'updatedAt';
-    const sortDir = sortOrder === 'asc' ? 'asc' : 'desc';
-
-    console.log('📊 执行数据库查询...');
-
-    // 获取项目列表
-    const projects = await prisma.project.findMany({
-      where,
-      include: {
-        owner: {
-          select: { 
-            id: true, 
-            name: true, 
-            email: true, 
-            image: true 
-          }
-        },
-        projectMembers: {
-          include: {
-            user: {
-              select: { 
-                id: true, 
-                name: true, 
-                email: true, 
-                image: true 
+    // 获取项目列表和总数
+    const [projects, total] = await Promise.all([
+      prisma.project.findMany({
+        where,
+        include: {
+          owner: {
+            select: { 
+              id: true, 
+              name: true, 
+              email: true
+            }
+          },
+          projectMembers: {
+            include: {
+              user: {
+                select: { 
+                  id: true, 
+                  name: true, 
+                  email: true
+                }
               }
             }
+          },
+          _count: {
+            select: {
+              projectMembers: true
+            }
+          }
+        },
+        orderBy: { 
+          [sortBy]: sortOrder 
+        },
+        skip,
+        take: limit
+      }),
+      prisma.project.count({ where })
+    ]);
+
+    // 🔧 修复：格式化响应数据
+    const formattedProjects = projects.map(project => ({
+      id: project.id,
+      title: project.title || '未命名项目',
+      description: project.description || '',
+      type: project.type || 'STANDARD_PROJECT',
+      status: project.status || 'DRAFT',
+      ownerId: project.ownerId,
+      owner: project.owner,
+      createdAt: project.createdAt.toISOString(),
+      updatedAt: project.updatedAt.toISOString(),
+      isOwner: project.ownerId === userId,
+      memberCount: project._count?.projectMembers || 0,
+      members: project.projectMembers?.map(member => ({
+        id: member.user.id,
+        name: member.user.name,
+        email: member.user.email,
+        role: member.role
+      })) || []
+    }));
+
+    console.log(`✅ [${requestId}] 获取项目成功: ${formattedProjects.length} 个项目`);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        projects: formattedProjects,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+          hasNext: page * limit < total,
+          hasPrev: page > 1
+        },
+        filters: {
+          type: type || 'all',
+          status: status || 'all',
+          search: search || ''
+        },
+        summary: {
+          totalProjects: total,
+          visibleProjects: formattedProjects.length,
+          ownedProjects: projects.filter(p => p.ownerId === userId).length
+        }
+      },
+      requestId,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error(`❌ [${requestId}] 获取项目列表失败:`, error);
+    return handleApiError(error, requestId, res);
+  }
+}
+
+// 🔧 修复的创建项目函数
+async function handleCreateProject(req, res, userId, requestId) {
+  try {
+    // 解析请求体
+    let projectData;
+    try {
+      projectData = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    } catch (parseError) {
+      return res.status(400).json({
+        success: false,
+        error: '无效的 JSON 数据',
+        requestId
+      });
+    }
+
+    const { title, description, type = 'STANDARD_PROJECT', status = 'DRAFT' } = projectData;
+
+    // 验证必需字段
+    if (!title || typeof title !== 'string' || title.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: '项目标题不能为空',
+        requestId
+      });
+    }
+
+    // 验证标题长度
+    if (title.trim().length > 200) {
+      return res.status(400).json({
+        success: false,
+        error: '项目标题不能超过200个字符',
+        requestId
+      });
+    }
+
+    // 验证类型和状态
+    if (!CONFIG.VALID_PROJECT_TYPES.includes(type)) {
+      return res.status(400).json({
+        success: false,
+        error: '无效的项目类型',
+        requestId
+      });
+    }
+
+    if (!CONFIG.VALID_PROJECT_STATUSES.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: '无效的项目状态',
+        requestId
+      });
+    }
+
+    console.log(`🆕 [${requestId}] 创建新项目:`, {
+      userId,
+      title: title.substring(0, 50),
+      type,
+      status
+    });
+
+    // 创建项目
+    const project = await prisma.project.create({
+      data: {
+        title: title.trim(),
+        description: description?.trim() || '',
+        type,
+        status,
+        visibility: 'PRIVATE',
+        ownerId: userId,
+        content: ''
+      },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true
           }
         },
         _count: {
@@ -205,83 +442,61 @@ async function getProjects(req, res, userId, prisma) {
             projectMembers: true
           }
         }
-      },
-      orderBy: { 
-        [sortField]: sortDir 
-      },
-      skip,
-      take: limitNum
-    });
-
-    // 获取总数
-    const total = await prisma.project.count({ where });
-
-    // 格式化响应数据
-    const formattedProjects = projects.map(project => ({
-      id: project.id,
-      title: project.title,
-      description: project.description,
-      content: project.content,
-      type: project.type,
-      status: project.status,
-      visibility: project.visibility,
-      ownerId: project.ownerId,
-      owner: project.owner,
-      createdAt: project.createdAt,
-      updatedAt: project.updatedAt,
-      isOwner: project.ownerId === userId,
-      memberCount: project._count.projectMembers,
-      members: project.projectMembers || []
-    }));
-
-    console.log(`✅ 获取项目成功: ${formattedProjects.length} 个项目`);
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        projects: formattedProjects,
-        pagination: {
-          page: pageNum,
-          limit: limitNum,
-          total,
-          pages: Math.ceil(total / limitNum),
-          hasNext: pageNum * limitNum < total,
-          hasPrev: pageNum > 1
-        },
-        filters: {
-          type: type || 'all',
-          status: status || 'all',
-          search: search || ''
-        }
       }
     });
 
+    // 自动将创建者添加为项目成员
+    await prisma.projectMember.create({
+      data: {
+        projectId: project.id,
+        userId: userId,
+        role: 'OWNER'
+      }
+    });
+
+    console.log(`✅ [${requestId}] 项目创建成功:`, { projectId: project.id });
+
+    // 🔧 修复：格式化响应数据
+    const formattedProject = {
+      id: project.id,
+      title: project.title,
+      description: project.description,
+      type: project.type,
+      status: project.status,
+      ownerId: project.ownerId,
+      owner: project.owner,
+      createdAt: project.createdAt.toISOString(),
+      updatedAt: project.updatedAt.toISOString(),
+      isOwner: true,
+      memberCount: project._count?.projectMembers || 0,
+      members: [{
+        id: project.owner.id,
+        name: project.owner.name,
+        email: project.owner.email,
+        role: 'OWNER'
+      }]
+    };
+
+    return res.status(201).json({
+      success: true,
+      data: formattedProject,
+      message: '项目创建成功',
+      requestId,
+      timestamp: new Date().toISOString()
+    });
+
   } catch (error) {
-    console.error('❌ 获取项目列表失败:', {
-      message: error.message,
-      code: error.code,
-      stack: error.stack
-    });
-    
-    // 处理特定的 Prisma 错误
-    if (error.code === 'P2025') {
-      return res.status(404).json({ 
-        success: false,
-        error: '记录未找到' 
-      });
-    } else if (error.code === 'P1017') {
-      return res.status(503).json({ 
-        success: false,
-        error: '数据库连接失败，请稍后重试' 
-      });
-    }
-    
-    return res.status(500).json({ 
-      success: false,
-      error: '获取项目列表失败',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    console.error(`❌ [${requestId}] 创建项目失败:`, error);
+    return handleApiError(error, requestId, res);
   }
 }
 
-// 创建新项目函数保持不变...
+// 🔧 API 配置
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb',
+    },
+    responseLimit: '10mb',
+  },
+};

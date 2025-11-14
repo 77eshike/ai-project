@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const userId = parseInt(session.user.id);
+    const userId = session.user?.id;
 
     if (req.method === 'GET') {
       // 获取用户的创意点列表

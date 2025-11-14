@@ -1,171 +1,275 @@
-// prisma/schema.prisma - 修复版本
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
 }
 
 model User {
-  id            Int          @id @default(autoincrement())
-  email         String       @unique
-  name          String?
-  password      String?
-  emailVerified DateTime?
-  image         String?
-  role          String?
-  status        Boolean      @default(true)
-  // 审计
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id              String           @id @default(cuid())
+  email           String           @unique @db.VarChar(255)
+  name            String?          @db.VarChar(255)
+  password        String?          @db.VarChar(255)
+  emailVerified   DateTime?
+  image           String?          @db.VarChar(500)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  lastLoginAt     DateTime?
+  preferences     Json?
+  role            UserRole         @default(USER)
+  status          UserStatus       @default(ACTIVE)
+  accounts        Account[]
+  files           File[]
+  knowledges      Knowledge[]
+  projectMembers  ProjectMember[]
+  sessions        Session[]
+  conversations   Conversation[]
+  projects        Project[]        @relation("ProjectOwner")
+  projectComments ProjectComment[]
 
- // 添加缺失的字段
-  lastLoginAt   DateTime?    @default(now())
-  preferences   Json?
-
-  // 关系
-  accounts      Account[]
-  sessions      Session[]
-  files         File[]
-  knowledges    Knowledge[]
-  conversations Conversation[]
-  projects      Project[]           // 用户创建的项目
-  projectMembers ProjectMember[]    // 用户参与的项目成员关系
-
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
   @@map("users")
 }
 
 model Account {
-  id                 String   @id @default(cuid())
-  userId             Int
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String?
-  access_token       String?
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String?
-  session_state      String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String  @id @default(cuid())
+  userId            String
+  type              String  @db.VarChar(50)
+  provider          String  @db.VarChar(50)
+  providerAccountId String  @db.VarChar(255)
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String? @db.VarChar(50)
+  scope             String? @db.VarChar(255)
+  id_token          String?
+  session_state     String? @db.VarChar(500)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@index([provider])
 }
 
 model Session {
   id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       Int
+  sessionToken String   @unique @db.VarChar(500)
+  userId       String
   expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expires])
+  @@index([sessionToken])
 }
 
 model VerificationToken {
-  identifier String
-  token      String   @unique
+  identifier String   @db.VarChar(255)
+  token      String   @unique @db.VarChar(500)
   expires    DateTime
 
   @@unique([identifier, token])
+  @@index([expires])
 }
 
 model File {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  filename  String
-  key       String
+  id        String   @id @default(cuid())
+  userId    String
+  filename  String   @db.VarChar(255)
+  key       String   @db.VarChar(500)
   size      Int
-  mimeType  String
-  url       String
+  mimeType  String   @db.VarChar(100)
+  url       String   @db.VarChar(500)
   createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([createdAt])
+  @@index([mimeType])
 }
 
 model Knowledge {
-  id        String   @id @default(cuid())
-  title     String?
-  content   String
-  category  String
-  tags      String
-  source    String
-  userId    Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // 关系
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  // 修复：添加反向关系
+  id                String    @id @default(cuid())
+  title             String?   @db.VarChar(500)
+  content           String
+  category          String    @db.VarChar(100)
+  tags              String    @db.VarChar(500)
+  source            String    @db.VarChar(255)
+  userId            String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  metadata          Json?
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   generatedProjects Project[] @relation("KnowledgeGeneratedProjects")
 
   @@index([userId])
   @@index([category])
+  @@index([createdAt])
+  @@index([tags])
+  @@index([title, content, tags])
 }
 
 model Conversation {
   id        String   @id @default(cuid())
-  title     String
+  title     String   @db.VarChar(500)
   messages  Json
-  userId    Int
+  userId    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   metadata  Json?
-  
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([updatedAt])
   @@map("conversations")
 }
 
-// 项目模型 - 完整版本
 model Project {
-  id          String   @id @default(cuid())
-  title       String
-  description String?
-  content     String?  // 项目详细内容
-  type        String   @default("STANDARD_PROJECT") // 项目类型: DRAFT_PROJECT, STANDARD_PROJECT, TEAM_PROJECT, GENERAL
-  status      String   @default("DRAFT") // 项目状态: DRAFT, PUBLISHED, RECRUITING, IN_PROGRESS, COMPLETED, ARCHIVED
-  visibility  String   @default("PRIVATE") // 可见性: PRIVATE, PUBLIC, TEAM
-  ownerId     Int
-  knowledgeSourceId String? // 从哪个知识库生成的
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String            @id @default(cuid())
+  title             String            @db.VarChar(500)
+  description       String?
+  ownerId           String
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  content           String?
+  knowledgeSourceId String?
+  metadata          Json?
+  status            ProjectStatus     @default(DRAFT)
+  type              ProjectType       @default(STANDARD_PROJECT)
+  visibility        ProjectVisibility @default(PRIVATE)
+  projectMembers    ProjectMember[]
+  knowledgeSource   Knowledge?        @relation("KnowledgeGeneratedProjects", fields: [knowledgeSourceId], references: [id])
+  owner             User              @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  projectComments   ProjectComment[]
 
-  // 关系
-  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  projectMembers ProjectMember[] // 项目成员
-  // 修复：添加关系名称避免冲突
-  knowledgeSource Knowledge?    @relation("KnowledgeGeneratedProjects", fields: [knowledgeSourceId], references: [id], onDelete: SetNull)
-
-  @@map("projects")
   @@index([ownerId])
   @@index([type])
   @@index([status])
   @@index([visibility])
   @@index([knowledgeSourceId])
+  @@index([createdAt])
+  @@index([title, description])
+  @@map("projects")
 }
 
-// 项目成员模型
 model ProjectMember {
-  id        String   @id @default(cuid())
+  id        String     @id @default(cuid())
   projectId String
-  userId    Int
-  role      String   @default("MEMBER") // 角色: OWNER, ADMIN, MEMBER, VIEWER
-  joinedAt  DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // 关系
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  joinedAt  DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  metadata  Json?
+  role      MemberRole @default(MEMBER)
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, userId])
   @@index([projectId])
   @@index([userId])
   @@index([role])
+  @@index([joinedAt])
+}
+
+model ProjectComment {
+  id        String           @id @default(cuid())
+  projectId String
+  userId    String
+  content   String
+  parentId  String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  metadata  Json?
+  status    CommentStatus    @default(ACTIVE)
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    ProjectComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  replies   ProjectComment[] @relation("CommentReplies")
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([parentId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("project_comments")
+}
+
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     String   @db.VarChar(20)
+  message   String
+  context   Json?
+  timestamp DateTime @default(now())
+  userId    String?
+
+  @@index([level])
+  @@index([timestamp])
+  @@index([userId])
+}
+
+model ApiRequest {
+  id         String   @id @default(cuid())
+  method     String   @db.VarChar(10)
+  path       String   @db.VarChar(500)
+  statusCode Int
+  userId     String?
+  duration   Int
+  userAgent  String?  @db.VarChar(500)
+  ipAddress  String?  @db.VarChar(45)
+  timestamp  DateTime @default(now())
+
+  @@index([method])
+  @@index([path])
+  @@index([statusCode])
+  @@index([userId])
+  @@index([timestamp])
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ProjectStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  ARCHIVED
+}
+
+enum ProjectType {
+  STANDARD_PROJECT
+  RESEARCH_PROJECT
+  DEVELOPMENT_PROJECT
+}
+
+enum ProjectVisibility {
+  PRIVATE
+  TEAM
+  PUBLIC
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum CommentStatus {
+  ACTIVE
+  DELETED
+  HIDDEN
 }

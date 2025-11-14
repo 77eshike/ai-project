@@ -1,4 +1,4 @@
-// pages/auth/signin.js - 优化版本
+// pages/auth/signin.js - 完全修复版本 (解决重定向循环)
 import { useState, useEffect } from 'react'
 import { getCsrfToken, getProviders, signIn, getSession } from 'next-auth/react'
 import { useRouter } from 'next/router'
@@ -17,22 +17,14 @@ const ERROR_MESSAGES = {
   '邮箱或密码错误': '邮箱或密码错误',
   'authorize': '认证失败',
   'credentials': '凭据错误',
-  '邮箱未验证': '请先验证您的邮箱地址',
-  '账户已被禁用': '您的账户已被禁用，请联系管理员',
-  'BLOCKED': '您的账户已被禁用，请联系管理员',
-  '未设置密码': '该账户未设置密码，请使用其他登录方式',
-  '不能为空': '邮箱和密码不能为空',
-  '状态异常': '账户状态异常，请联系管理员',
-  '用户不存在': '邮箱或密码错误', // 安全考虑，不提示用户不存在
 }
 
-export default function SignIn({ csrfToken, providers }) {
+export default function SignIn({ csrfToken, providers, serverSession }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isClient, setIsClient] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const router = useRouter()
@@ -40,60 +32,91 @@ export default function SignIn({ csrfToken, providers }) {
   useEffect(() => {
     setIsClient(true)
     
-    // 检测移动设备
-    if (typeof window !== 'undefined') {
-      const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-      const isMobileDevice = /android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
-      setIsMobile(isMobileDevice)
-      
-      // 从本地存储恢复记住我状态
-      const savedEmail = localStorage.getItem('rememberedEmail')
-      if (savedEmail) {
-        setEmail(savedEmail)
-        setRememberMe(true)
-      }
+    // 从本地存储恢复记住我状态
+    const savedEmail = localStorage.getItem('rememberedEmail')
+    if (savedEmail) {
+      setEmail(savedEmail)
+      setRememberMe(true)
     }
   }, [])
+
+  // 🔧 关键修复：简化认证状态检查
+  useEffect(() => {
+    if (!isClient || hasCheckedAuth) return
+    
+    const checkAuth = async () => {
+      try {
+        console.log('🔍 检查用户认证状态...')
+        
+        // 使用服务器端会话和客户端会话双重检查
+        let session = serverSession;
+        if (!session) {
+          session = await getSession();
+        }
+        
+        if (session?.user) {
+          const callbackUrl = router.query.callbackUrl;
+          
+          // 🔧 关键修复：验证和清理回调URL
+          let redirectUrl = '/dashboard';
+          if (callbackUrl && 
+              callbackUrl !== '/auth/signin' && 
+              callbackUrl.startsWith('/') &&
+              !callbackUrl.includes('//')) {
+            redirectUrl = callbackUrl;
+          }
+          
+          console.log('✅ 用户已登录，准备跳转到:', redirectUrl);
+          setHasCheckedAuth(true);
+          
+          // 🔧 关键修复：添加延迟，避免与注册流程冲突
+          setTimeout(() => {
+            console.log('🔄 执行跳转到:', redirectUrl);
+            // 使用replace避免历史记录问题
+            router.replace(redirectUrl).catch(error => {
+              console.error('路由跳转失败:', error);
+              // 备用方案：硬跳转
+              window.location.href = redirectUrl;
+            });
+          }, 300);
+        } else {
+          setHasCheckedAuth(true);
+        }
+      } catch (error) {
+        console.error('检查会话错误:', error);
+        setHasCheckedAuth(true);
+      }
+    }
+
+    // 🔧 关键修复：添加防抖，避免重复检查
+    const timeoutId = setTimeout(checkAuth, 100);
+    return () => clearTimeout(timeoutId);
+  }, [isClient, router, hasCheckedAuth, serverSession]);
 
   // 处理URL错误参数
   useEffect(() => {
     if (router.query.error) {
-      const errorMessage = ERROR_MESSAGES[router.query.error] || ERROR_MESSAGES['Default']
-      setError(errorMessage)
+      const errorKey = Object.keys(ERROR_MESSAGES).find(key => 
+        router.query.error.includes(key)
+      );
+      const errorMessage = errorKey ? ERROR_MESSAGES[errorKey] : ERROR_MESSAGES['Default'];
+      setError(errorMessage);
       
       // 清除URL中的错误参数
-      const cleanUrl = window.location.pathname
-      window.history.replaceState({}, document.title, cleanUrl)
+      const url = new URL(window.location.href);
+      url.searchParams.delete('error');
+      window.history.replaceState({}, document.title, url.toString());
     }
-  }, [router.query.error])
-
-  // 检查认证状态
-  useEffect(() => {
-    const checkAuth = async () => {
-      if (!isClient || hasCheckedAuth) return
-      
-      try {
-        console.log('🔍 检查用户是否已登录...')
-        const session = await getSession()
-        
-        if (session?.user) {
-          const callbackUrl = router.query.callbackUrl || '/dashboard'
-          console.log('✅ 用户已登录，跳转到:', callbackUrl)
-          setHasCheckedAuth(true)
-          
-          // 使用replace而不是push，避免浏览器历史记录问题
-          router.replace(callbackUrl)
-        } else {
-          setHasCheckedAuth(true)
-        }
-      } catch (error) {
-        console.error('检查会话错误:', error)
-        setHasCheckedAuth(true)
-      }
+    
+    // 处理注册成功消息
+    if (router.query.message === 'registered') {
+      setError(''); // 清除可能存在的错误
+      // 可以在这里显示注册成功的提示
+      const url = new URL(window.location.href);
+      url.searchParams.delete('message');
+      window.history.replaceState({}, document.title, url.toString());
     }
-
-    checkAuth()
-  }, [isClient, router, hasCheckedAuth])
+  }, [router.query.error, router.query.message]);
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -109,20 +132,21 @@ export default function SignIn({ csrfToken, providers }) {
       return
     }
 
-    if (password.length < 6) {
-      setError('密码长度至少6位')
-      return
-    }
-
     setIsLoading(true)
     setError('')
 
     try {
-      const callbackUrl = router.query.callbackUrl || '/dashboard'
+      let callbackUrl = router.query.callbackUrl || '/dashboard';
+      
+      // 🔧 关键修复：清理和验证回调URL
+      if (callbackUrl === '/auth/signin' || !callbackUrl.startsWith('/')) {
+        callbackUrl = '/dashboard';
+      }
+      
       const normalizedEmail = email.trim().toLowerCase()
       
       console.log('🔐 开始登录:', { 
-        email: normalizedEmail,
+        email: normalizedEmail.substring(0, 3) + '***',
         callbackUrl 
       })
 
@@ -133,58 +157,50 @@ export default function SignIn({ csrfToken, providers }) {
         localStorage.removeItem('rememberedEmail')
       }
 
-      // 使用 credentials 登录
+      // 🔧 关键修复：使用简化的登录调用
       const result = await signIn('credentials', {
         email: normalizedEmail,
         password,
-        redirect: false,
-        callbackUrl: callbackUrl
+        redirect: false
       })
 
-      console.log('🔐 登录API响应:', result)
+      console.log('🔐 登录API响应:', { 
+        ok: result?.ok, 
+        error: result?.error,
+        url: result?.url 
+      })
 
       if (result?.error) {
-        // 错误处理
-        let errorMessage = ERROR_MESSAGES['Default']
+        // 简化的错误处理
+        let errorMessage = '邮箱或密码错误';
         
-        // 查找匹配的错误消息
-        for (const [key, message] of Object.entries(ERROR_MESSAGES)) {
-          if (result.error.includes(key) || result.error.toLowerCase().includes(key.toLowerCase())) {
-            errorMessage = message
-            break
-          }
+        if (result.error.includes('Configuration') || result.error.includes('authorize')) {
+          errorMessage = '系统配置错误，请联系管理员';
         }
         
-        setError(errorMessage)
-        console.error('❌ 登录失败:', result.error)
+        setError(errorMessage);
+        console.error('❌ 登录失败:', result.error);
         
-        // 如果是凭据错误，清空密码字段
-        if (errorMessage === '邮箱或密码错误') {
-          setPassword('')
-        }
+        // 清空密码字段
+        setPassword('');
       } else if (result?.ok) {
         // 登录成功
-        console.log('✅ 登录成功，跳转到:', result.url || callbackUrl)
+        console.log('✅ 登录成功');
         
-        // 显示成功消息
-        setError('')
-        
-        // 使用硬跳转确保状态完全更新
+        // 🔧 关键修复：使用硬跳转，不使用next-auth的URL
         setTimeout(() => {
-          const targetUrl = result.url || callbackUrl
-          console.log('🔀 最终跳转URL:', targetUrl)
-          window.location.href = targetUrl
-        }, 800)
+          console.log('🔄 跳转到:', callbackUrl);
+          window.location.href = callbackUrl;
+        }, 500);
       } else {
-        // 未知响应
-        setError('登录响应异常，请重试')
-        console.error('❌ 未知登录响应:', result)
+        setError('登录响应异常，请重试');
+        console.error('❌ 未知登录响应:', result);
       }
     } catch (error) {
-      console.error('❌ 登录异常:', error)
-      setError('登录过程中发生错误，请重试')
+      console.error('❌ 登录异常:', error);
+      setError('登录过程中发生错误，请重试');
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
   }
 
@@ -194,8 +210,13 @@ export default function SignIn({ csrfToken, providers }) {
       setIsLoading(true)
       setError('')
       
+      let callbackUrl = router.query.callbackUrl || '/dashboard';
+      if (callbackUrl === '/auth/signin') {
+        callbackUrl = '/dashboard';
+      }
+      
       await signIn(providerId, {
-        callbackUrl: router.query.callbackUrl || '/dashboard'
+        callbackUrl: callbackUrl
       })
     } catch (error) {
       console.error('❌ 第三方登录错误:', error)
@@ -203,6 +224,26 @@ export default function SignIn({ csrfToken, providers }) {
       setIsLoading(false)
     }
   }
+
+  // 紧急修复功能
+  const handleEmergencyFix = () => {
+    console.log('🚨 执行紧急修复...');
+    
+    // 清除所有存储
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // 清除cookies
+    document.cookie.split(';').forEach(cookie => {
+      const name = cookie.split('=')[0].trim();
+      if (name.includes('auth') || name.includes('session') || name.includes('next')) {
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+      }
+    });
+    
+    alert('认证状态已清除，页面将刷新');
+    window.location.reload();
+  };
 
   // 渲染状态
   if (!isClient) {
@@ -221,7 +262,7 @@ export default function SignIn({ csrfToken, providers }) {
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
       </Head>
       
-      <div className={`min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8 ${isMobile ? 'mobile-layout' : ''}`}>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full space-y-8">
           {/* 头部 */}
           <div className="text-center">
@@ -236,6 +277,17 @@ export default function SignIn({ csrfToken, providers }) {
             <p className="mt-2 text-sm text-gray-600">
               登录您的账户继续使用
             </p>
+            
+            {/* 🔧 紧急修复按钮 */}
+            <div className="mt-4">
+              <button
+                onClick={handleEmergencyFix}
+                className="text-xs text-red-600 hover:text-red-500 underline"
+                title="清除所有认证状态"
+              >
+                遇到登录问题？点击这里修复
+              </button>
+            </div>
           </div>
           
           {/* 登录表单 */}
@@ -288,7 +340,6 @@ export default function SignIn({ csrfToken, providers }) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={isLoading}
-                    minLength={6}
                   />
                 </div>
               </div>
@@ -396,6 +447,7 @@ function LoadingScreen({ message }) {
   )
 }
 
+// 🔧 关键修复：服务器端认证检查
 export async function getServerSideProps(context) {
   try {
     const [csrfToken, providers, session] = await Promise.all([
@@ -404,11 +456,24 @@ export async function getServerSideProps(context) {
       getSession(context)
     ])
 
-    // 如果用户已经登录，直接重定向
-    if (session) {
+    // 🔧 关键修复：如果用户已登录，在服务器端直接重定向
+    if (session?.user) {
+      const callbackUrl = context.query.callbackUrl;
+      
+      // 验证和清理回调URL
+      let redirectUrl = '/dashboard';
+      if (callbackUrl && 
+          callbackUrl !== '/auth/signin' && 
+          callbackUrl.startsWith('/') &&
+          !callbackUrl.includes('//')) {
+        redirectUrl = callbackUrl;
+      }
+      
+      console.log('🔄 服务器端重定向:', redirectUrl);
+      
       return {
         redirect: {
-          destination: context.query.callbackUrl || '/dashboard',
+          destination: redirectUrl,
           permanent: false,
         },
       }
@@ -417,15 +482,19 @@ export async function getServerSideProps(context) {
     return {
       props: { 
         csrfToken,
-        providers: providers ? Object.values(providers) : []
+        providers: providers ? Object.values(providers) : [],
+        serverSession: session || null
       },
     }
   } catch (error) {
-    console.error('登录页面服务器端错误:', error)
+    console.error('登录页面服务器端错误:', error);
+    
+    // 🔧 关键修复：出错时返回空会话，避免阻塞
     return {
       props: { 
         csrfToken: null,
-        providers: []
+        providers: [],
+        serverSession: null
       },
     }
   }

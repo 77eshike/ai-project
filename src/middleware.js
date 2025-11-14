@@ -1,302 +1,149 @@
-// middleware.js - 完整修复版本
+// middleware.js - 优化版本
 import { NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
-import { rateLimit } from './middleware/rate-limit';
 
-// 路径配置
-const PATH_CONFIG = {
-  // 公开路径（不需要认证）
-  public: [
-    /^\/$/,
-    /^\/auth\/(signin|signup|error|logout)(\/.*)?$/,
-    /^\/api\/(auth|public|health)(\/.*)?$/,
-    /\.(svg|png|jpg|jpeg|gif|webp|ico)$/,
-    /^\/_next\//,
-    /^\/sitemap\.xml$/,
-    /^\/robots\.txt$/
-  ],
-  
-  // 保护路径（需要认证）
-  protected: [
-    /^\/dashboard(\/.*)?$/,
-    /^\/chat(\/.*)?$/,
-    /^\/projects(\/.*)?$/,
-    /^\/api\/(ai|knowledge|projects)(\/.*)?$/
-  ]
-};
-
-// 恶意路径模式
-const MALICIOUS_PATTERNS = [
-  /\.env$/,
-  /\.git(\/|$)/,
-  /\.htaccess$/,
-  /\.(asp|php|jsp|aspx)$/,
-  /\/phpinfo$/,
-  /\/config\.(json|js)$/,
-  /\/package\.json$/,
-  /\/(admin|wp-admin|wp-login)(\/|$)/,
-  /\/\.well-known(\/|$)/,
-  /\/(backup|database|sql|debug|test)(\/|$)/
-];
-
-export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-  ],
-};
-
-export async function middleware(request) {
-  const { pathname, origin, searchParams } = request.nextUrl;
-  
-  console.log(`🛡️ 中间件处理: ${pathname}`, {
-    hasLogoutParam: searchParams.has('logout'),
-    method: request.method
-  });
-  
-  // 🔧 关键修复：在认证检查之前特殊处理登出后的登录页面
-  if (pathname.startsWith('/auth/signin') && searchParams.has('logout')) {
-    console.log('🔓 检测到登出后的登录页面访问，强制允许');
-    
-    // 创建响应
-    const response = NextResponse.next();
-    
-    // 设置安全头
-    setSecurityHeaders(response, request, pathname);
-    
-    // 添加自定义头标识
-    response.headers.set('X-Auth-Status', 'post-logout');
-    
-    return response;
+// 🔧 优化：更精确的公开路径配置
+function isPublicPath(pathname) {
+  // 静态资源 - 完全跳过
+  if (pathname.startsWith('/_next/') || 
+      pathname.startsWith('/static/') ||
+      pathname.includes('.') || 
+      pathname === '/favicon.ico' ||
+      pathname === '/site.webmanifest') {
+    return true;
   }
   
-  // 1. 安全检查
-  const securityCheck = await checkSecurity(request, pathname);
-  if (securityCheck) return securityCheck;
-  
-  // 2. 速率限制
-  const rateLimitResult = await rateLimit(request);
-  if (rateLimitResult.limited) {
-    return createRateLimitResponse(rateLimitResult, pathname);
-  }
-  
-  // 3. 认证检查
-  const authCheck = await checkAuthentication(request, pathname, origin);
-  if (authCheck) return authCheck;
-  
-  // 4. 安全头设置
-  const response = authCheck || NextResponse.next();
-  return setSecurityHeaders(response, request, pathname);
-}
-
-// 认证检查 - 修复版本
-async function checkAuthentication(request, pathname, origin) {
-  const isPublicPath = PATH_CONFIG.public.some(pattern => pattern.test(pathname));
-  const isProtectedPath = PATH_CONFIG.protected.some(pattern => pattern.test(pathname));
-  
-  // 🔧 关键修复：永远允许访问认证相关页面
-  if (pathname.startsWith('/auth/')) {
-    console.log(`✅ 允许访问认证页面: ${pathname}`);
-    return null;
-  }
-  
-  // 如果是公开路径，直接放行
-  if (isPublicPath) {
-    return null;
-  }
-  
-  // 如果是非保护路径，也放行
-  if (!isProtectedPath) {
-    return null;
-  }
-  
-  console.log(`🔐 检查保护路径认证: ${pathname}`);
-  
-  try {
-    const token = await getToken({ 
-      req: request,
-      secret: process.env.NEXTAUTH_SECRET,
-      secureCookie: process.env.NODE_ENV === 'production'
-    });
-    
-    console.log(`🔍 Token检查:`, {
-      hasToken: !!token,
-      tokenExp: token?.exp,
-      currentTime: Math.floor(Date.now() / 1000),
-      isExpired: token?.exp ? token.exp < Math.floor(Date.now() / 1000) : 'unknown'
-    });
-    
-    // 如果没有token，重定向到登录页
-    if (!token) {
-      console.log(`🚫 无有效token，重定向到登录页`);
-      return handleUnauthorized(request, pathname, origin);
-    }
-    
-    // 检查token是否过期
-    const currentTime = Math.floor(Date.now() / 1000);
-    const isTokenExpired = token.exp && (token.exp < currentTime);
-    
-    if (isTokenExpired) {
-      console.log(`⌛ Token已过期，重定向到登录页`);
-      return handleUnauthorized(request, pathname, origin);
-    }
-    
-    console.log(`✅ 认证通过: ${pathname}`);
-    
-    // 有有效token且访问保护路径，允许访问
-    return null;
-    
-  } catch (error) {
-    console.error('❌ 认证检查错误:', error);
-    return handleAuthError(error, pathname);
-  }
-}
-
-// 设置安全头
-function setSecurityHeaders(response, request, pathname) {
-  response.headers.set('X-Content-Type-Options', 'nosniff');
-  response.headers.set('X-Frame-Options', 'DENY');
-  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  response.headers.set('X-XSS-Protection', '1; mode=block');
-  
-  if (pathname.startsWith('/api/')) {
-    setApiHeaders(response, request);
-  }
-  
-  if (pathname.startsWith('/_next/static/')) {
-    response.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
-  }
-  
-  if (process.env.NODE_ENV === 'production') {
-    response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  }
-  
-  return response;
-}
-
-// API 头设置
-function setApiHeaders(response, request) {
-  const origin = request.headers.get('origin');
-  const allowedOrigins = process.env.NODE_ENV === 'development' 
-    ? ['http://localhost:3000', 'http://localhost:3001', 'https://localhost:3001']
-    : ['https://191413.ai'];
-  
-  if (origin && allowedOrigins.includes(origin)) {
-    response.headers.set('Access-Control-Allow-Origin', origin);
-  }
-  
-  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  response.headers.set('Access-Control-Allow-Credentials', 'true');
-  response.headers.set('Access-Control-Max-Age', '86400');
-  
-  if (request.method === 'OPTIONS') {
-    return new NextResponse(null, { 
-      status: 200,
-      headers: Object.fromEntries(response.headers)
-    });
-  }
-}
-
-// 工具函数
-function getClientIP(request) {
-  return request.ip || 
-         request.headers.get('x-forwarded-for')?.split(',')[0] || 
-         request.headers.get('x-real-ip') || 
-         'unknown';
-}
-
-function isSuspiciousUserAgent(userAgent) {
-  const suspiciousPatterns = [
-    /bot/i,
-    /crawler/i,
-    /scanner/i,
-    /nikto/i,
-    /sqlmap/i,
-    /metasploit/i
+  // 🔧 优化：精确的公开路径匹配
+  const publicPaths = [
+    '/', 
+    '/auth', '/auth/signin', '/auth/signup', '/auth/error',
+    '/api/auth', '/api/health', '/api/debug',
+    '/signup', '/register', '/login', '/signin'
   ];
-  return suspiciousPatterns.some(pattern => pattern.test(userAgent));
-}
-
-async function checkSecurity(request, pathname) {
-  const userAgent = request.headers.get('user-agent') || '';
-  const ip = getClientIP(request);
   
-  const isMaliciousPath = MALICIOUS_PATTERNS.some(pattern => pattern.test(pathname));
-  if (isMaliciousPath) {
-    console.log(`🚫 阻止恶意请求: ${pathname}`, { ip });
-    return new NextResponse('Not Found', { status: 404 });
-  }
-  
-  if (isSuspiciousUserAgent(userAgent)) {
-    console.log(`🚫 可疑用户代理: ${userAgent.substring(0, 100)}`);
-    return new NextResponse('Forbidden', { status: 403 });
-  }
-  
-  return null;
-}
-
-function handleUnauthorized(request, pathname, origin) {
-  if (pathname.startsWith('/api/')) {
-    return new NextResponse(
-      JSON.stringify({ 
-        success: false,
-        error: '未经授权的访问',
-        code: 'UNAUTHORIZED'
-      }),
-      { 
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      }
-    );
-  }
-  
-  const signInUrl = new URL('/auth/signin', origin);
-  signInUrl.searchParams.set('callbackUrl', pathname);
-  return NextResponse.redirect(signInUrl);
-}
-
-function handleAuthError(error, pathname) {
-  if (!pathname.startsWith('/api/')) {
-    return NextResponse.next();
-  }
-  
-  return new NextResponse(
-    JSON.stringify({ 
-      success: false,
-      error: '认证检查失败',
-      code: 'AUTH_ERROR'
-    }),
-    { 
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    }
+  // 精确匹配或前缀匹配
+  return publicPaths.some(publicPath => 
+    pathname === publicPath || 
+    pathname.startsWith(publicPath + '/')
   );
 }
 
-function createRateLimitResponse(rateLimitResult, pathname) {
-  if (pathname.startsWith('/api/')) {
-    return new NextResponse(
-      JSON.stringify({
-        error: '请求过于频繁，请稍后重试',
-        retryAfter: rateLimitResult.retryAfter
-      }),
-      {
-        status: 429,
-        headers: {
-          'Content-Type': 'application/json',
-          'Retry-After': rateLimitResult.retryAfter.toString(),
-          'X-RateLimit-Limit': rateLimitResult.max?.toString() || '100',
-          'X-RateLimit-Remaining': '0',
-          'X-RateLimit-Reset': rateLimitResult.resetTime?.toString() || ''
-        }
-      }
-    );
-  }
+// 🔧 优化：需要保护的路径
+function isProtectedPath(pathname) {
+  const protectedPaths = [
+    '/dashboard',
+    '/api/ai/chat',
+    '/api/user',
+    '/api/conversation'
+  ];
   
-  return new NextResponse('Too Many Requests', {
-    status: 429,
-    headers: {
-      'Retry-After': rateLimitResult.retryAfter.toString()
+  return protectedPaths.some(protectedPath => 
+    pathname === protectedPath || 
+    pathname.startsWith(protectedPath + '/')
+  );
+}
+
+export const config = {
+  matcher: [
+    // 🔧 优化：保护所有需要认证的路径
+    '/dashboard/:path*',
+    '/api/ai/:path*',
+    '/api/user/:path*',
+    '/api/conversation/:path*'
+  ]
+};
+
+export async function middleware(request) {
+  const { pathname, origin, search } = request.nextUrl;
+  
+  // 🔧 优化：减少日志输出，只在开发环境记录
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🛡️ 中间件处理:', { path: pathname, method: request.method });
+  }
+
+  // 🔧 优化：先检查是否是公开路径
+  if (isPublicPath(pathname)) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✅ 公开路径，直接放行:', pathname);
     }
-  });
+    return NextResponse.next();
+  }
+
+  // 🔧 优化：只保护需要认证的路径
+  if (!isProtectedPath(pathname)) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔓 非保护路径，直接放行:', pathname);
+    }
+    return NextResponse.next();
+  }
+
+  try {
+    // 🔧 优化：改进的 Cookie 检查
+    const cookies = request.cookies;
+    const hasSessionCookie = 
+      cookies.get('next-auth.session-token')?.value ||
+      cookies.get('__Secure-next-auth.session-token')?.value;
+    
+    if (!hasSessionCookie) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('❌ 无会话Cookie，拒绝访问:', pathname);
+      }
+      
+      // 🔧 优化：改进的重定向逻辑
+      if (pathname.startsWith('/api/')) {
+        return new Response(
+          JSON.stringify({ 
+            error: '未经授权的访问',
+            code: 'UNAUTHORIZED',
+            message: '请先登录',
+            redirectTo: '/auth/signin'
+          }),
+          { 
+            status: 401,
+            headers: { 
+              'Content-Type': 'application/json',
+              'X-Auth-Redirect': '/auth/signin'
+            }
+          }
+        );
+      } else {
+        // 页面请求重定向到登录页
+        const signInUrl = new URL('/auth/signin', origin);
+        // 保留原始URL用于登录后重定向
+        if (pathname !== '/') {
+          signInUrl.searchParams.set('callbackUrl', pathname + search);
+        }
+        return NextResponse.redirect(signInUrl);
+      }
+    }
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✅ 有会话Cookie，放行请求:', pathname);
+    }
+    
+    // 🔧 优化：添加认证头信息
+    const response = NextResponse.next();
+    response.headers.set('X-Auth-Status', 'authenticated');
+    return response;
+    
+  } catch (error) {
+    console.error('❌ 中间件错误:', error);
+    
+    // 🔧 优化：出错时根据路径类型处理
+    if (pathname.startsWith('/api/')) {
+      return new Response(
+        JSON.stringify({ 
+          error: '服务器内部错误',
+          code: 'MIDDLEWARE_ERROR'
+        }),
+        { 
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+    
+    // 页面请求出错时放行
+    console.log('⚠️ 中间件出错，放行页面请求');
+    return NextResponse.next();
+  }
 }

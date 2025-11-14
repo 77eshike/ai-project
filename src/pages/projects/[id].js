@@ -1,6 +1,20 @@
+// /pages/projects/[id].js - 修复版本
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
-import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import Head from 'next/head';
+
+const CONFIG = {
+  RETRY_DELAY: 3000,
+  MAX_RETRY_COUNT: 3,
+  STATUS_COLORS: {
+    DRAFT: { bg: 'bg-gray-100', text: 'text-gray-800', label: '草稿' },
+    PUBLISHED: { bg: 'bg-blue-100', text: 'text-blue-800', label: '已发布' },
+    RECRUITING: { bg: 'bg-green-100', text: 'text-green-800', label: '招募中' },
+    IN_PROGRESS: { bg: 'bg-purple-100', text: 'text-purple-800', label: '进行中' },
+    COMPLETED: { bg: 'bg-green-100', text: 'text-green-800', label: '已完成' }
+  }
+};
 
 export default function ProjectDetailPage() {
   const router = useRouter();
@@ -10,77 +24,45 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview');
-  const [commentText, setCommentText] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
 
-  // 使用 ref 防止重复加载
-  const hasLoadedRef = useRef(false);
+  const isAuthenticated = !!session;
+  const isLoadingSession = sessionStatus === 'loading';
 
-  useEffect(() => {
-    // 如果已经加载过或没有ID，直接返回
-    if (hasLoadedRef.current || !id) return;
+  // 修复：安全的项目ID获取
+  const projectId = id && typeof id === 'string' ? id.trim() : null;
 
-    const loadProjectData = async () => {
-      console.log('🔄 开始加载项目详情:', { projectId: id, sessionStatus });
+  const loadProject = useCallback(async () => {
+    if (!projectId) return;
 
-      // 如果会话还在加载，等待
-      if (sessionStatus === 'loading') {
-        console.log('⏳ 等待会话加载完成...');
-        return;
-      }
-
-      // 如果未认证，设置错误
-      if (!session) {
-        console.log('🚫 用户未认证');
-        setError('请先登录以查看项目详情');
-        setLoading(false);
-        return;
-      }
-
-      // 标记为已加载，防止重复
-      hasLoadedRef.current = true;
-      await loadProject();
-    };
-
-    loadProjectData();
-  }, [id, sessionStatus, session]);
-
-  // 单独的 useEffect 处理会话状态变化
-  useEffect(() => {
-    if (sessionStatus === 'unauthenticated' && hasLoadedRef.current) {
-      console.log('🔐 检测到用户登出');
-      setProject(null);
-      setError('会话已过期，请重新登录');
-      setLoading(false);
-    }
-  }, [sessionStatus]);
-
-  const loadProject = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      console.log('📡 发送项目详情请求...');
+      console.log('📡 加载项目详情:', projectId);
 
-      const response = await fetch(`/api/projects/${id}`, {
+      const response = await fetch(`/api/projects/${projectId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
+        credentials: 'include'
       });
 
       console.log('📨 API响应状态:', response.status);
 
       if (!response.ok) {
-        let errorMessage = `HTTP错误! 状态: ${response.status}`;
+        let errorMessage = `加载失败 (${response.status})`;
         
         if (response.status === 401) {
           errorMessage = '请先登录';
+          // 修复：避免立即重定向，让组件处理
         } else if (response.status === 404) {
           errorMessage = '项目不存在';
         } else if (response.status === 403) {
           errorMessage = '无权访问此项目';
+        } else {
+          errorMessage = '服务器错误，请稍后重试';
         }
         
         throw new Error(errorMessage);
@@ -88,13 +70,12 @@ export default function ProjectDetailPage() {
 
       const data = await response.json();
       
-      console.log('📊 API响应数据:', data);
-
       if (data.success) {
         console.log('✅ 项目加载成功');
         const projectData = data.data?.project || data.project;
         if (projectData) {
           setProject(projectData);
+          setRetryCount(0);
         } else {
           throw new Error('项目数据格式错误');
         }
@@ -104,429 +85,221 @@ export default function ProjectDetailPage() {
 
     } catch (error) {
       console.error('❌ 加载项目详情失败:', error);
+      
+      // 修复：只在网络错误时重试，不在认证错误时重试
+      if (!error.message.includes('登录') && 
+          !error.message.includes('无权') && 
+          !error.message.includes('不存在') &&
+          retryCount < CONFIG.MAX_RETRY_COUNT) {
+        console.log(`🔄 准备重试 (${retryCount + 1}/${CONFIG.MAX_RETRY_COUNT})`);
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          loadProject();
+        }, CONFIG.RETRY_DELAY);
+        return;
+      }
+      
       setError(error.message);
-      // 发生错误时重置加载状态，允许重试
-      hasLoadedRef.current = false;
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId, retryCount]);
 
-  const addComment = async () => {
-    if (!commentText.trim()) return;
+  // 修复：改进的加载逻辑
+  useEffect(() => {
+    if (!projectId || isLoadingSession) return;
 
-    try {
-      const response = await fetch(`/api/projects/${id}/comments`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ content: commentText })
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        setCommentText('');
-        loadProject();
-      } else {
-        throw new Error(data.error || '添加评论失败');
-      }
-    } catch (error) {
-      console.error('添加评论失败:', error);
-      alert('添加评论失败: ' + error.message);
+    if (!isAuthenticated) {
+      setError('请先登录以查看项目详情');
+      setLoading(false);
+      return;
     }
-  };
 
-  const updateProjectStatus = async (newStatus) => {
-    try {
-      const response = await fetch(`/api/projects/${id}`, {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ status: newStatus })
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        const updatedProject = data.data?.project || data.project;
-        setProject(updatedProject);
-      } else {
-        throw new Error(data.error || '更新状态失败');
-      }
-    } catch (error) {
-      console.error('更新项目状态失败:', error);
-      alert('更新状态失败: ' + error.message);
-    }
+    loadProject();
+  }, [projectId, isLoadingSession, isAuthenticated, loadProject]);
+
+  const handleLoginRedirect = () => {
+    const currentPath = `/projects/${projectId}`;
+    router.push(`/auth/signin?callbackUrl=${encodeURIComponent(currentPath)}`);
   };
 
   const handleRetry = () => {
-    hasLoadedRef.current = false;
+    setError(null);
+    setLoading(true);
+    setRetryCount(0);
     loadProject();
   };
+
+  // 修复：显示会话加载状态
+  if (isLoadingSession) {
+    return (
+      <>
+        <Head>
+          <title>验证身份... - 项目详情</title>
+        </Head>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">验证用户身份...</p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // 修复：显示未认证状态
+  if (!isAuthenticated) {
+    return (
+      <>
+        <Head>
+          <title>需要登录 - 项目详情</title>
+        </Head>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center max-w-md">
+            <div className="text-6xl mb-4">🔐</div>
+            <h3 className="text-xl font-medium text-gray-900 mb-2">需要登录</h3>
+            <p className="text-gray-600 mb-4">请先登录以查看项目详情</p>
+            <button
+              onClick={handleLoginRedirect}
+              className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              立即登录
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   // 显示加载状态
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">加载项目详情中...</p>
-          <p className="text-sm text-gray-500 mt-2">项目ID: {id}</p>
-          {sessionStatus === 'loading' && (
-            <p className="text-sm text-blue-500 mt-1">验证用户会话...</p>
-          )}
+      <>
+        <Head>
+          <title>加载中... - 项目详情</title>
+        </Head>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">加载项目详情中...</p>
+            <p className="text-sm text-gray-500 mt-2">项目ID: {projectId}</p>
+            {retryCount > 0 && (
+              <p className="text-sm text-orange-600 mt-1">
+                第 {retryCount} 次重试...
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   // 显示错误状态
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="text-6xl mb-4">😕</div>
-          <h3 className="text-xl font-medium text-gray-900 mb-2">加载失败</h3>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <div className="space-y-3">
-            <button
-              onClick={handleRetry}
-              className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              重新加载
-            </button>
-            <button
-              onClick={() => router.push('/projects')}
-              className="w-full bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors"
-            >
-              返回项目列表
-            </button>
-            {error.includes('登录') && (
+      <>
+        <Head>
+          <title>加载失败 - 项目详情</title>
+        </Head>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center max-w-md">
+            <div className="text-6xl mb-4">😕</div>
+            <h3 className="text-xl font-medium text-gray-900 mb-2">加载失败</h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <div className="space-y-3">
+              {!error.includes('登录') && !error.includes('无权') && !error.includes('不存在') && (
+                <button
+                  onClick={handleRetry}
+                  className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  重新加载
+                </button>
+              )}
               <button
-                onClick={() => router.push('/auth/signin')}
-                className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors"
+                onClick={() => router.push('/projects')}
+                className="w-full bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors"
               >
-                立即登录
+                返回项目列表
               </button>
-            )}
+            </div>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
   if (!project) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-6xl mb-4">😕</div>
-          <h3 className="text-xl font-medium text-gray-900 mb-2">项目不存在</h3>
-          <button
-            onClick={() => router.push('/projects')}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            返回项目列表
-          </button>
+      <>
+        <Head>
+          <title>项目不存在 - 项目详情</title>
+        </Head>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-6xl mb-4">😕</div>
+            <h3 className="text-xl font-medium text-gray-900 mb-2">项目不存在</h3>
+            <button
+              onClick={() => router.push('/projects')}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              返回项目列表
+            </button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
+  const statusConfig = CONFIG.STATUS_COLORS[project.status] || CONFIG.STATUS_COLORS.DRAFT;
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* 项目头部 */}
-      <div className="bg-white border-b shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center space-x-3 mb-2">
-                <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 truncate">
-                  {project.title}
-                </h1>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  project.status === 'DRAFT' ? 'bg-gray-100 text-gray-800' :
-                  project.status === 'PUBLISHED' ? 'bg-blue-100 text-blue-800' :
-                  project.status === 'RECRUITING' ? 'bg-green-100 text-green-800' :
-                  'bg-purple-100 text-purple-800'
-                }`}>
-                  {project.status}
-                </span>
-              </div>
-              <p className="text-gray-600 text-lg">{project.description}</p>
-            </div>
-            
-            <div className="flex space-x-3 w-full lg:w-auto">
-              {project.status === 'DRAFT' && (
-                <button
-                  onClick={() => updateProjectStatus('PUBLISHED')}
-                  className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium"
-                >
-                  发布项目
-                </button>
-              )}
-              {project.status === 'PUBLISHED' && (
-                <button
-                  onClick={() => updateProjectStatus('RECRUITING')}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                >
-                  开始招募
-                </button>
-              )}
-              <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium">
-                分享项目
-              </button>
-            </div>
-          </div>
-
-          {/* 标签栏 */}
-          <div className="flex space-x-8 mt-6 border-b overflow-x-auto">
-            {[
-              { id: 'overview', label: '项目概览', icon: '📊' },
-              { id: 'team', label: '团队成员', icon: '👥' },
-              { id: 'recruitment', label: '招募信息', icon: '🎯' },
-              { id: 'updates', label: '项目动态', icon: '🔄' },
-              { id: 'comments', label: '讨论区', icon: '💬' }
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center pb-4 px-1 border-b-2 transition-colors whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600 font-medium'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <span className="mr-2">{tab.icon}</span>
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* 标签内容 */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'overview' && <ProjectOverview project={project} />}
-        {activeTab === 'team' && <ProjectTeam project={project} />}
-        {activeTab === 'recruitment' && <ProjectRecruitment project={project} />}
-        {activeTab === 'comments' && (
-          <ProjectComments 
-            project={project} 
-            commentText={commentText}
-            setCommentText={setCommentText}
-            onAddComment={addComment}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-// 项目概览组件
-function ProjectOverview({ project }) {
-  return (
-    <div className="grid gap-6 lg:grid-cols-3">
-      {/* 左侧内容 */}
-      <div className="lg:col-span-2 space-y-6">
-        {/* 项目进度 */}
-        <div className="bg-white rounded-lg border p-6">
-          <h3 className="text-lg font-semibold mb-4">项目进度</h3>
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="font-medium">整体进度</span>
-                <span className="text-gray-600">65%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div 
-                  className="bg-blue-600 h-3 rounded-full transition-all duration-500" 
-                  style={{ width: '65%' }}
-                ></div>
+    <>
+      <Head>
+        <title>{project.title} - 项目详情</title>
+        <meta name="description" content={project.description || '项目详情页面'} />
+      </Head>
+      
+      <div className="min-h-screen bg-gray-50">
+        {/* 项目头部 */}
+        <div className="bg-white border-b shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center space-x-3 mb-2">
+                  <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 truncate">
+                    {project.title}
+                  </h1>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusConfig.bg} ${statusConfig.text}`}>
+                    {statusConfig.label}
+                  </span>
+                </div>
+                <p className="text-gray-600 text-lg">{project.description}</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* 项目内容 */}
-        <div className="bg-white rounded-lg border p-6">
-          <h3 className="text-lg font-semibold mb-4">项目详情</h3>
-          <div className="prose max-w-none text-gray-700">
-            {project.content ? (
-              <div className="whitespace-pre-wrap">{project.content}</div>
-            ) : (
-              <p className="text-gray-500 italic">暂无项目详情内容</p>
-            )}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-white rounded-lg border p-6">
+            <h2 className="text-xl font-semibold mb-4">项目详情</h2>
+            <div className="prose max-w-none">
+              {project.content ? (
+                <div className="whitespace-pre-wrap">{project.content}</div>
+              ) : (
+                <p className="text-gray-500 italic">暂无项目详情内容</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
-
-      {/* 右侧边栏 */}
-      <div className="space-y-6">
-        {/* 项目信息卡片 */}
-        <div className="bg-white rounded-lg border p-6">
-          <h3 className="text-lg font-semibold mb-4">项目信息</h3>
-          <div className="space-y-4">
-            <div>
-              <span className="text-gray-600 text-sm block">项目负责人</span>
-              <div className="font-medium flex items-center mt-1">
-                <div className="w-6 h-6 rounded-full bg-gray-300 mr-2 flex items-center justify-center text-xs">
-                  {project.owner?.name?.charAt(0) || 'U'}
-                </div>
-                {project.owner?.name || '未知用户'}
-              </div>
-            </div>
-            <div>
-              <span className="text-gray-600 text-sm block">创建时间</span>
-              <div className="font-medium">
-                {project.createdAt ? new Date(project.createdAt).toLocaleDateString('zh-CN') : '未知'}
-              </div>
-            </div>
-            <div>
-              <span className="text-gray-600 text-sm block">最后更新</span>
-              <div className="font-medium">
-                {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString('zh-CN') : '未知'}
-              </div>
-            </div>
-            <div>
-              <span className="text-gray-600 text-sm block">项目类型</span>
-              <div className="font-medium">
-                {project.type === 'DRAFT_PROJECT' ? '待定项目' : 
-                 project.type === 'STANDARD_PROJECT' ? '标准项目' : 
-                 project.type || '未知类型'}
-              </div>
-            </div>
-            <div>
-              <span className="text-gray-600 text-sm block">可见性</span>
-              <div className="font-medium">
-                {project.visibility === 'PUBLIC' ? '公开' : 
-                 project.visibility === 'PRIVATE' ? '私有' : 
-                 project.visibility || '未知'}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 快速操作 */}
-        <div className="bg-white rounded-lg border p-6">
-          <h3 className="text-lg font-semibold mb-4">快速操作</h3>
-          <div className="space-y-2">
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors flex items-center">
-              <span className="mr-2">👥</span>
-              邀请成员
-            </button>
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors flex items-center">
-              <span className="mr-2">📝</span>
-              发布更新
-            </button>
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors flex items-center">
-              <span className="mr-2">🎯</span>
-              创建招募
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
 
-// 团队成员组件
-function ProjectTeam({ project }) {
-  // 确保 members 数组存在
-  const members = project.members || [];
-  
-  return (
-    <div className="bg-white rounded-lg border p-6">
-      <h3 className="text-lg font-semibold mb-4">团队成员 ({members.length})</h3>
-      <div className="space-y-4">
-        {members.length > 0 ? (
-          members.map((member) => (
-            <div key={member.id} className="flex items-center justify-between p-3 border rounded-lg">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                  <span className="text-gray-600 font-medium">
-                    {member.user?.name?.charAt(0) || 'U'}
-                  </span>
-                </div>
-                <div>
-                  <div className="font-medium">{member.user?.name || '未知用户'}</div>
-                  <div className="text-sm text-gray-600">{member.user?.email || ''}</div>
-                </div>
-              </div>
-              <span className={`px-2 py-1 rounded text-xs font-medium ${
-                member.role === 'OWNER' ? 'bg-purple-100 text-purple-800' :
-                member.role === 'ADMIN' ? 'bg-blue-100 text-blue-800' :
-                'bg-gray-100 text-gray-800'
-              }`}>
-                {member.role === 'OWNER' ? '负责人' : 
-                 member.role === 'ADMIN' ? '管理员' : '成员'}
-              </span>
-            </div>
-          ))
-        ) : (
-          <div className="text-center py-8">
-            <div className="text-6xl mb-4">👥</div>
-            <p className="text-gray-600">暂无团队成员</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// 招募信息组件
-function ProjectRecruitment({ project }) {
-  return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg border p-8 text-center">
-        <div className="text-6xl mb-4">🎯</div>
-        <h3 className="text-xl font-medium text-gray-900 mb-2">暂无招募信息</h3>
-        <p className="text-gray-600 mb-4">创建招募信息来吸引团队成员加入</p>
-        <button className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors">
-          创建招募
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// 评论组件
-function ProjectComments({ project, commentText, setCommentText, onAddComment }) {
-  return (
-    <div className="space-y-6">
-      {/* 评论输入框 */}
-      <div className="bg-white rounded-lg border p-6">
-        <h3 className="text-lg font-semibold mb-4">发表评论</h3>
-        <div className="space-y-3">
-          <textarea
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            placeholder="输入您的评论或建议..."
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-            rows="4"
-          />
-          <div className="flex justify-end">
-            <button
-              onClick={onAddComment}
-              disabled={!commentText.trim()}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              发表评论
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 评论列表 */}
-      <div className="space-y-4">
-        <div className="bg-white rounded-lg border p-8 text-center">
-          <div className="text-6xl mb-4">💬</div>
-          <h3 className="text-xl font-medium text-gray-900 mb-2">暂无评论</h3>
-          <p className="text-gray-600">成为第一个发表评论的人</p>
-        </div>
-      </div>
-    </div>
-  );
+// 修复：禁用预渲染，避免路由冲突
+export async function getServerSideProps() {
+  return {
+    props: {},
+  };
 }

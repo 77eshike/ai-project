@@ -1,4 +1,4 @@
-// /src/pages/auth/error.js
+// /src/pages/auth/error.js - 最终版本
 import { useRouter } from 'next/router'
 import { useEffect } from 'react'
 import Link from 'next/link'
@@ -84,4 +84,11 @@ export default function AuthError() {
       </div>
     </>
   )
+}
+
+// 🔧 重要：添加 getServerSideProps 避免静态生成问题
+export async function getServerSideProps() {
+  return {
+    props: {},
+  };
 }

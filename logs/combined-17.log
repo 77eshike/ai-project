@@ -1,0 +1,101 @@
+2025-11-05T11:46:10:    ▲ Next.js 15.5.6
+2025-11-05T11:46:10:    - Local:        http://localhost:3000
+2025-11-05T11:46:10:    - Network:      http://43.228.124.126:3000
+2025-11-05T11:46:10: 
+2025-11-05T11:46:10:  ✓ Starting...
+2025-11-05T11:46:10:  ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+2025-11-05T11:46:10:  ⚠ "next start" does not work with "output: standalone" configuration. Use "node .next/standalone/server.js" instead.
+2025-11-05T11:46:10:  ✓ Ready in 370ms
+2025-11-05T11:46:11: ✅ Prisma 数据库连接成功
+2025-11-05T11:46:11: ✅ Prisma 数据库连接成功
+2025-11-05T11:46:13: [next-auth][error][CLIENT_FETCH_ERROR] 
+https://next-auth.js.org/errors#client_fetch_error Unexpected token '<', "<html>
+<h"... is not valid JSON {
+  error: {
+    message: `Unexpected token '<', "<html>\r\n<h"... is not valid JSON`,
+    stack: `SyntaxError: Unexpected token '<', "<html>\r\n` +
+      '<h"... is not valid JSON\n' +
+      '    at JSON.parse (<anonymous>)\n' +
+      '    at parseJSONFromBytes (node:internal/deps/undici/undici:5738:19)\n' +
+      '    at successSteps (node:internal/deps/undici/undici:5719:27)\n' +
+      '    at fullyReadBody (node:internal/deps/undici/undici:4609:9)\n' +
+      '    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n' +
+      '    at async consumeBody (node:internal/deps/undici/undici:5728:7)',
+    name: 'SyntaxError'
+  },
+  url: 'https://191413.ai/api/auth/providers',
+  message: `Unexpected token '<', "<html>\r\n<h"... is not valid JSON`
+}
+2025-11-05T11:46:35: ❌ 认证过程错误: 邮箱或密码错误
+2025-11-05T13:08:24:    ▲ Next.js 15.5.6
+2025-11-05T13:08:24:    - Local:        http://localhost:3000
+2025-11-05T13:08:24:    - Network:      http://43.228.124.126:3000
+2025-11-05T13:08:24: 
+2025-11-05T13:08:24:  ✓ Starting...
+2025-11-05T13:08:24:  ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+2025-11-05T13:08:29:    ▲ Next.js 15.5.6
+2025-11-05T13:08:29:    - Local:        http://localhost:3000
+2025-11-05T13:08:29:    - Network:      http://43.228.124.126:3000
+2025-11-05T13:08:29: 
+2025-11-05T13:08:29:  ✓ Starting...
+2025-11-05T13:08:29:  ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+2025-11-05T13:08:33:    ▲ Next.js 15.5.6
+2025-11-05T13:08:33:    - Local:        http://localhost:3000
+2025-11-05T13:08:33:    - Network:      http://43.228.124.126:3000
+2025-11-05T13:08:33: 
+2025-11-05T13:08:33:  ✓ Starting...
+2025-11-05T13:08:33:  ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+2025-11-05T13:08:37:    ▲ Next.js 15.5.6
+2025-11-05T13:08:37:    - Local:        http://localhost:3000
+2025-11-05T13:08:37:    - Network:      http://43.228.124.126:3000
+2025-11-05T13:08:37: 
+2025-11-05T13:08:37:  ✓ Starting...
+2025-11-05T13:08:38:  ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+2025-11-05T13:08:42:    ▲ Next.js 15.5.6
+2025-11-05T13:08:42:    - Local:        http://localhost:3000
+2025-11-05T13:08:42:    - Network:      http://43.228.124.126:3000
+2025-11-05T13:08:42: 
+2025-11-05T13:08:42:  ✓ Starting...
+2025-11-05T13:08:42:  ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+2025-11-05T13:08:46:    ▲ Next.js 15.5.6
+2025-11-05T13:08:46:    - Local:        http://localhost:3000
+2025-11-05T13:08:46:    - Network:      http://43.228.124.126:3000
+2025-11-05T13:08:46: 
+2025-11-05T13:08:46:  ✓ Starting...
+2025-11-05T13:08:46:  ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+2025-11-05T13:08:51:    ▲ Next.js 15.5.6
+2025-11-05T13:08:51:    - Local:        http://localhost:3000
+2025-11-05T13:08:51:    - Network:      http://43.228.124.126:3000
+2025-11-05T13:08:51: 
+2025-11-05T13:08:51:  ✓ Starting...
+2025-11-05T13:08:51:  ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+2025-11-05T13:08:55:    ▲ Next.js 15.5.6
+2025-11-05T13:08:55:    - Local:        http://localhost:3000
+2025-11-05T13:08:55:    - Network:      http://43.228.124.126:3000
+2025-11-05T13:08:55: 
+2025-11-05T13:08:55:  ✓ Starting...
+2025-11-05T13:08:55:  ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+2025-11-05T13:09:00:    ▲ Next.js 15.5.6
+2025-11-05T13:09:00:    - Local:        http://localhost:3000
+2025-11-05T13:09:00:    - Network:      http://43.228.124.126:3000
+2025-11-05T13:09:00: 
+2025-11-05T13:09:00:  ✓ Starting...
+2025-11-05T13:09:00:  ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+2025-11-05T13:09:04:    ▲ Next.js 15.5.6
+2025-11-05T13:09:04:    - Local:        http://localhost:3000
+2025-11-05T13:09:04:    - Network:      http://43.228.124.126:3000
+2025-11-05T13:09:04: 
+2025-11-05T13:09:04:  ✓ Starting...
+2025-11-05T13:09:04:  ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+2025-11-05T14:05:37:    ▲ Next.js 15.5.6
+2025-11-05T14:05:37:    - Local:        http://localhost:3000
+2025-11-05T14:05:37:    - Network:      http://43.228.124.126:3000
+2025-11-05T14:05:37: 
+2025-11-05T14:05:37:  ✓ Starting...
+2025-11-05T14:05:37:  ✓ Ready in 365ms
+2025-11-05T14:05:37: ✅ Prisma 数据库连接成功
+2025-11-05T14:05:37: ✅ Prisma 数据库连接成功
+2025-11-05T14:07:01: TypeError: Cannot read properties of null (reading 'useContext')
+    at n (.next/server/pages/api/debug-auth.js:1:1009)
+    at async Module.u (.next/server/pages/api/debug-auth.js:1:3075)
+2025-11-05T14:09:29: ❌ 认证过程错误: 邮箱或密码错误

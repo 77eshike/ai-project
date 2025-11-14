@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '../../../../lib/auth'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
-import prisma from '../../../lib/prisma'
+import prisma from '../../../../lib/prisma'
 
 const s3Client = new S3Client({
   region: process.env.AWS_REGION,

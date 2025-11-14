@@ -1,135 +1,248 @@
-// src/lib/auth.js - 完整修复版本
-import NextAuth from 'next-auth'
-import CredentialsProvider from 'next-auth/providers/credentials'
-import { PrismaAdapter } from '@next-auth/prisma-adapter'
-import bcrypt from 'bcryptjs'
-import { prisma } from './prisma'
-
-const adapter = PrismaAdapter(prisma)
+// /src/lib/auth.js - 完整用户信息修复版本
+import NextAuth from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import { PrismaAdapter } from '@next-auth/prisma-adapter';
+import { prisma } from './prisma';
+import bcrypt from 'bcryptjs';
 
 export const authOptions = {
-  secret: process.env.NEXTAUTH_SECRET,
-  trustHost: true,
-  adapter: adapter,
+  // 🔧 JWT策略：使用Prisma适配器但强制JWT
+  adapter: PrismaAdapter(prisma),
+  
+  session: {
+    strategy: 'jwt', // 明确使用JWT策略
+    maxAge: 30 * 24 * 60 * 60,
+    updateAge: 24 * 60 * 60, // 24小时更新一次session
+  },
   
   providers: [
     CredentialsProvider({
       name: 'credentials',
       credentials: {
-        email: { label: '邮箱', type: 'email', placeholder: 'example@email.com' },
+        email: { label: '邮箱', type: 'email' },
         password: { label: '密码', type: 'password' }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error('邮箱和密码不能为空')
-        }
-
         try {
-          // 查找用户
+          console.log('🔐 JWT认证请求:', credentials.email);
+          
+          if (!credentials?.email || !credentials?.password) {
+            console.log('❌ 缺少邮箱或密码');
+            return null;
+          }
+          
+          // 🔧 关键修复：查询完整的用户信息
           const user = await prisma.user.findUnique({
-            where: { email: credentials.email.toLowerCase() }
-          })
-
+            where: { 
+              email: credentials.email.toLowerCase().trim()
+            },
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              password: true,
+              image: true,
+              role: true,
+              status: true,
+              createdAt: true,
+              updatedAt: true,
+              lastLoginAt: true,
+              emailVerified: true,
+              preferences: true
+            }
+          });
+          
           if (!user) {
-            throw new Error('用户不存在')
+            console.log('❌ 用户不存在:', credentials.email);
+            return null;
           }
-
-          // 验证密码
-          const isPasswordValid = await bcrypt.compare(
-            credentials.password,
-            user.password
-          )
-
-          if (!isPasswordValid) {
-            throw new Error('密码错误')
+          
+          if (!user.password) {
+            console.log('❌ 用户没有密码:', user.id);
+            return null;
           }
-
-          // 返回用户信息（排除密码）
+          
+          const isValid = await bcrypt.compare(credentials.password, user.password);
+          if (!isValid) {
+            console.log('❌ 密码验证失败');
+            return null;
+          }
+          
+          // 🔧 更新最后登录时间
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { lastLoginAt: new Date() }
+          });
+          
+          console.log('✅ JWT认证成功，用户ID:', user.id, '类型:', typeof user.id);
+          
+          // 🔧 关键修复：返回完整的用户信息
           return {
-            id: user.id,
+            id: String(user.id), // 强制转换为字符串
             email: user.email,
-            name: user.name,
-            role: user.role,
-            image: user.image
-          }
+            name: user.name || user.email.split('@')[0],
+            role: user.role || 'USER',
+            image: user.image,
+            status: user.status || 'ACTIVE',
+            createdAt: user.createdAt?.toISOString() || new Date().toISOString(),
+            updatedAt: user.updatedAt?.toISOString() || new Date().toISOString(),
+            lastLoginAt: user.lastLoginAt?.toISOString() || null,
+            emailVerified: user.emailVerified?.toISOString() || null,
+            preferences: user.preferences || {}
+          };
         } catch (error) {
-          console.error('认证错误:', error)
-          throw new Error(error.message || '认证失败')
+          console.error('JWT认证错误:', error);
+          return null;
         }
       }
     })
   ],
   
-  session: { 
-    strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30天
-    updateAge: 24 * 60 * 60, // 24小时
+  callbacks: {
+    async jwt({ token, user, account, trigger, session }) {
+      console.log('🔐 JWT回调 - 输入:', {
+        hasUser: !!user,
+        userId: user?.id,
+        userIdType: typeof user?.id,
+        tokenId: token.id,
+        tokenIdType: typeof token.id,
+        tokenSub: token.sub
+      });
+      
+      // 🔧 关键修复：用户登录时设置完整信息
+      if (user) {
+        token.id = String(user.id); // 确保是字符串
+        token.sub = String(user.id); // sub字段也设置
+        token.role = user.role;
+        token.status = user.status;
+        token.image = user.image;
+        token.createdAt = user.createdAt;
+        token.updatedAt = user.updatedAt;
+        token.lastLoginAt = user.lastLoginAt;
+        token.emailVerified = user.emailVerified;
+        token.preferences = user.preferences;
+        console.log('✅ JWT设置完整用户信息:', {
+          id: token.id,
+          role: token.role,
+          status: token.status,
+          createdAt: token.createdAt
+        });
+      }
+      
+      // 🔧 关键修复：处理session更新
+      if (trigger === "update" && session?.user?.id) {
+        token.id = String(session.user.id);
+        token.sub = String(session.user.id);
+        
+        // 如果有更新的用户信息，也更新到token中
+        if (session.user.role) token.role = session.user.role;
+        if (session.user.status) token.status = session.user.status;
+        if (session.user.image) token.image = session.user.image;
+        if (session.user.lastLoginAt) token.lastLoginAt = session.user.lastLoginAt;
+        
+        console.log('✅ JWT更新用户信息:', token.id);
+      }
+      
+      console.log('🔐 JWT回调 - 输出:', {
+        tokenId: token.id,
+        tokenIdType: typeof token.id,
+        tokenSub: token.sub,
+        tokenRole: token.role,
+        tokenStatus: token.status,
+        tokenCreatedAt: token.createdAt
+      });
+      
+      return token;
+    },
+    
+    async session({ session, token, user }) {
+      console.log('🔐 Session回调 - 输入:', {
+        sessionUser: session.user,
+        sessionUserKeys: Object.keys(session.user),
+        tokenId: token.id,
+        tokenIdType: typeof token.id,
+        tokenSub: token.sub
+      });
+      
+      // 🔧 关键修复：确保session.user包含所有必要字段
+      if (token) {
+        // 确保session.user对象存在
+        if (!session.user) {
+          session.user = {};
+        }
+        
+        // 🔧 关键修复：设置完整的用户信息
+        session.user.id = token.id || token.sub;
+        session.user.email = token.email || session.user.email;
+        session.user.name = token.name || session.user.name;
+        session.user.role = token.role || session.user.role || 'USER';
+        session.user.image = token.image || session.user.image;
+        session.user.status = token.status || session.user.status || 'ACTIVE';
+        session.user.createdAt = token.createdAt || session.user.createdAt;
+        session.user.updatedAt = token.updatedAt || session.user.updatedAt;
+        session.user.lastLoginAt = token.lastLoginAt || session.user.lastLoginAt;
+        session.user.emailVerified = token.emailVerified || session.user.emailVerified;
+        session.user.preferences = token.preferences || session.user.preferences || {};
+        
+        console.log('✅ Session设置完成:', {
+          sessionUserId: session.user.id,
+          sessionUserRole: session.user.role,
+          sessionUserStatus: session.user.status,
+          sessionUserCreatedAt: session.user.createdAt,
+          sessionUserKeys: Object.keys(session.user)
+        });
+      } else {
+        console.error('❌ Session回调：token为空');
+      }
+      
+      console.log('🔐 Session回调 - 输出:', {
+        sessionUserId: session.user.id,
+        sessionUserIdType: typeof session.user.id,
+        sessionUserEmail: session.user.email,
+        sessionUserRole: session.user.role,
+        sessionUserStatus: session.user.status,
+        sessionUserCreatedAt: session.user.createdAt,
+        sessionUserKeys: Object.keys(session.user)
+      });
+      
+      return session;
+    }
   },
   
   pages: {
     signIn: '/auth/signin',
-    signOut: '/auth/signin?logout=success',
-    error: '/auth/error',
+    signOut: '/auth/signout',
+    error: '/auth/error'
   },
   
-  callbacks: {
-    async jwt({ token, user, account, profile }) {
-      if (user) {
-        token.id = user.id
-        token.role = user.role
-        token.email = user.email
-        token.name = user.name
-        token.picture = user.image
-      }
-      return token
-    },
-    
-    async session({ session, token }) {
-      if (token) {
-        session.user.id = token.id
-        session.user.role = token.role
-        session.user.email = token.email
-        session.user.name = token.name
-        session.user.image = token.picture
-      }
-      return session
-    },
-    
-    async redirect({ url, baseUrl }) {
-      console.log('🔍 重定向检查:', { url, baseUrl });
-      
-      // 🔧 关键修复：允许所有登出相关的重定向
-      if (url.includes('logout')) {
-        console.log('✅ 允许登出重定向:', url);
-        return url;
-      }
-      
-      // 允许所有认证页面的重定向
-      if (url.includes('/auth/')) {
-        console.log('✅ 允许认证页面重定向:', url);
-        return url;
-      }
-      
-      // 如果URL已经是绝对URL，直接返回
-      if (url.startsWith('http')) {
-        console.log('✅ 已经是绝对URL:', url);
-        return url;
-      }
-      
-      // 默认情况下，构建绝对URL
-      const redirectUrl = url.startsWith('/') ? `${baseUrl}${url}` : `${baseUrl}/${url}`;
-      console.log('🔀 构建重定向URL:', redirectUrl);
-      return redirectUrl;
-    }
-  },
-  
-  events: {
-    async signOut({ token, session }) {
-      console.log('👋 用户退出登录事件触发:', token?.id)
-    }
-  },
-  
+  // 🔧 增强配置
   debug: process.env.NODE_ENV === 'development',
-}
+  secret: process.env.NEXTAUTH_SECRET,
+  
+  // 🔧 添加事件日志
+  events: {
+    async signIn(message) {
+      console.log('🔐 用户登录:', {
+        email: message.user.email,
+        userId: message.user.id,
+        timestamp: new Date().toISOString()
+      });
+    },
+    async signOut(message) {
+      console.log('🔐 用户登出:', {
+        email: message.session?.user?.email,
+        userId: message.session?.user?.id,
+        timestamp: new Date().toISOString()
+      });
+    },
+    async session(message) {
+      console.log('🔐 Session事件:', {
+        trigger: message.trigger,
+        session: message.session?.user?.email,
+        userId: message.session?.user?.id
+      });
+    }
+  }
+};
 
-export default NextAuth(authOptions)
+export default NextAuth(authOptions);

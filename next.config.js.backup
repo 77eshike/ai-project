@@ -1,220 +1,298 @@
-// next.config.js - 修复版本
 /** @type {import('next').NextConfig} */
-
 const nextConfig = {
-  // 🔧 关键修复：添加输出配置
-  output: 'standalone',
+  // 🔧 关键修复：移除 output: 'standalone'，因为它与 next start 不兼容
+  // output: 'standalone', // 注释掉这行
   
   // 基础配置
+  trailingSlash: false,
   reactStrictMode: false,
   poweredByHeader: false,
-  generateEtags: false,
   
-  // 构建配置优化
-  generateBuildId: async () => {
-    return `build-${Date.now().toString(36)}`;
-  },
-  
-  // 压缩和优化
-  compress: true,
-  
-  // 图片配置优化
+  // 图片配置
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**.191413.ai',
-      },
-      {
-        protocol: 'https',
-        hostname: 'avatars.githubusercontent.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-      },
-      {
-        protocol: 'http',
-        hostname: 'localhost',
-      },
-      {
-        protocol: 'http',
-        hostname: '127.0.0.1',
-      },
-      {
-        protocol: 'http',
-        hostname: '43.228.124.126',
-      },
+    domains: [
+      'localhost',
+      '127.0.0.1', 
+      '43.228.124.126',
+      '191413.ai'
     ],
-    formats: ['image/webp', 'image/avif'],
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
-    minimumCacheTTL: 60,
+    unoptimized: process.env.NODE_ENV === 'development',
+    // 🔧 新增：禁用图片优化警告
     dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
   
-  // 环境变量增强
-  env: {
-    BUILD_VERSION: new Date().toISOString(),
-    BUILD_TIME: new Date().toISOString(),
-    APP_ENV: process.env.NODE_ENV || 'development',
-    APP_NAME: '191413AI平台',
+  // 构建配置
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
   },
   
-  // Webpack 配置优化 - 修复 Prisma 问题
-  webpack: (config, { dev, isServer, webpack }) => {
-    // 添加构建ID到环境变量
-    config.plugins.push(
-      new webpack.DefinePlugin({
-        'process.env.BUILD_TIMESTAMP': JSON.stringify(Date.now()),
-        'process.env.NEXT_PUBLIC_APP_URL': JSON.stringify(process.env.NEXTAUTH_URL || 'http://43.228.124.126'),
-      })
-    );
-
-    // 开发环境特定配置
-    if (dev) {
-      // 忽略开发环境警告
-      config.ignoreWarnings = [
-        { module: /middleware/ },
-        { module: /_devMiddlewareManifest/ },
-        { module: /_devPagesManifest/ },
-        { file: /node_modules\/@next\/react-dev-overlay/ },
-        { message: /Module not found/ },
-        { message: /Can't resolve/ },
-      ];
+  // 实验性功能 - 针对 Next.js 15 优化
+  experimental: {
+    optimizeCss: true,
+    // 🔧 新增：优化 bundle 大小
+    optimizePackageImports: ['lucide-react', 'react-icons'],
+    // 🔧 新增：禁用预加载相关功能
+    staleTimes: {
+      dynamic: 0,      // 禁用动态路由的预加载
+      static: 0,       // 禁用静态页面的预加载
+    },
+    // 🔧 修复：使用正确的配置名称
+    serverExternalPackages: ['bcryptjs', 'jsonwebtoken'],
+  },
+  
+  // 🔧 关键修复：简化环境变量配置
+  env: {
+    NEXT_PUBLIC_APP_URL: process.env.NEXTAUTH_URL || 'https://191413.ai',
+    // 🔧 新增：添加构建时间戳用于缓存控制
+    NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
+    // 🔧 新增：禁用预加载标志
+    NEXT_PUBLIC_DISABLE_PRELOAD: 'true',
+  },
+  
+  // 🔧 关键修复：简化重定向，避免循环
+  async redirects() {
+    return [
+      {
+        source: '/home',
+        destination: '/',
+        permanent: true,
+      },
+      // 🔧 新增：保护性重定向，避免未认证访问
+      {
+        source: '/api/auth/error',
+        destination: '/auth/signin',
+        permanent: false,
+      },
+      // 🔧 新增：阻止预加载数据的重定向
+      {
+        source: '/_next/data/:path*/dashboard.json',
+        destination: '/auth/signin',
+        permanent: false,
+        has: [
+          {
+            type: 'query',
+            key: 'callbackUrl',
+            value: '/dashboard',
+          }
+        ]
+      },
+    ];
+  },
+  
+  // 🔧 关键修复：简化的 Webpack 配置
+  webpack: (config, { isServer, dev, buildId }) => {
+    // 为客户端代码提供必要的 polyfill
+    if (!isServer) {
+      config.resolve.fallback = {
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: require.resolve('crypto-browserify'),
+        stream: require.resolve('stream-browserify'),
+        path: require.resolve('path-browserify'),
+        os: require.resolve('os-browserify/browser'),
+        http: require.resolve('stream-http'),
+        https: require.resolve('https-browserify'),
+        zlib: require.resolve('browserify-zlib'),
+      };
     }
 
-    // 模块解析优化
-    config.resolve = {
-      ...config.resolve,
-      alias: {
-        ...config.resolve.alias,
-        'react-native$': 'react-native-web',
-      },
-      extensions: ['.js', '.jsx', '.ts', '.tsx', '.json', '.md', '.mdx'],
-      fallback: {
-        ...config.resolve.fallback,
-        fs: false,
-        path: false,
-        os: false,
-        crypto: false,
-        stream: false,
-      }
-    };
+    // 🔧 新增：开发环境优化
+    if (dev) {
+      config.watchOptions = {
+        poll: 1000,
+        aggregateTimeout: 300,
+      };
+    }
 
-    // 🔧 修复：处理 Prisma 客户端 - 确保正确打包
-    if (isServer) {
-      config.externals = config.externals || [];
-      // 确保 Prisma 相关包正确打包
-      config.externals.push(({ context, request }, callback) => {
-        if (request && request.includes('@prisma/client')) {
-          return callback();
-        }
-        if (request && request.includes('prisma')) {
-          return callback();
-        }
-        callback();
-      });
+    // 🔧 新增：生产环境禁用预加载优化
+    if (!dev && !isServer) {
+      // 禁用某些可能导致预加载的优化
+      config.optimization = {
+        ...config.optimization,
+        // 减少代码分割，避免预加载
+        splitChunks: {
+          chunks: 'all',
+          cacheGroups: {
+            default: false,
+            vendors: false,
+            // 只对大的库进行代码分割
+            commons: {
+              name: 'commons',
+              chunks: 'all',
+              minChunks: 2,
+              reuseExistingChunk: true,
+            },
+          },
+        },
+      };
     }
 
     return config;
   },
   
-  // ESLint 和 TypeScript 配置
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  
-  // 编译器配置优化
+  // 编译配置
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? {
       exclude: ['error', 'warn'],
     } : false,
+    // 🔧 新增：优化样式组件
+    reactRemoveProperties: process.env.NODE_ENV === 'production' ? {
+      properties: ['^data-testid$'],
+    } : false,
   },
   
-  // CORS 配置
+  // 生产环境优化
+  compress: true,
+  
+  // 🔧 关键修复：简化的 headers 配置
   async headers() {
-    const securityHeaders = [
-      {
-        key: 'X-Frame-Options',
-        value: 'DENY',
-      },
-      {
-        key: 'X-Content-Type-Options',
-        value: 'nosniff',
-      },
-      {
-        key: 'Referrer-Policy',
-        value: 'strict-origin-when-cross-origin',
-      },
-      {
-        key: 'X-XSS-Protection',
-        value: '1; mode=block',
-      },
-    ];
-    
     return [
       {
-        source: '/(.*)',
-        headers: securityHeaders,
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff'
+          },
+          {
+            key: 'X-Frame-Options', 
+            value: 'DENY'
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block'
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin'
+          },
+          // 🔧 修改：更严格的缓存控制
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=0, must-revalidate'
+          },
+        ],
       },
+      // 🔧 新增：API 路由的特殊头
       {
         source: '/api/:path*',
         headers: [
           {
+            key: 'Cache-Control',
+            value: 'public, max-age=0, must-revalidate'
+          },
+          {
             key: 'Access-Control-Allow-Origin',
-            value: '*'
+            value: process.env.NEXTAUTH_URL || 'https://191413.ai'
           },
           {
             key: 'Access-Control-Allow-Methods',
-            value: 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH'
+            value: 'GET, POST, PUT, DELETE, OPTIONS'
           },
           {
             key: 'Access-Control-Allow-Headers',
-            value: 'Content-Type, Authorization, X-Requested-With, Accept, Cookie'
+            value: 'X-Requested-With, Content-Type, Authorization'
+          },
+        ],
+      },
+      // 🔧 新增：静态资源缓存
+      {
+        source: '/_next/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable'
+          },
+        ],
+      },
+      // 🔧 新增：阻止预加载数据的缓存
+      {
+        source: '/_next/data/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=0, must-revalidate'
           },
           {
-            key: 'Access-Control-Allow-Credentials',
+            key: 'X-No-Preload',
             value: 'true'
           },
+        ],
+      },
+      // 🔧 新增：字体和图片缓存
+      {
+        source: '/(.*)\\.(ico|png|jpg|jpeg|gif|webp|svg)',
+        headers: [
           {
-            key: 'Access-Control-Max-Age',
-            value: '86400'
+            key: 'Cache-Control',
+            value: 'public, max-age=86400, stale-while-revalidate=604800'
           },
         ],
       },
     ];
   },
+
+  // 🔧 新增：页面配置扩展
+  pageExtensions: ['js', 'jsx', 'ts', 'tsx', 'md', 'mdx'],
   
-  // 重定向配置
-  async redirects() {
-    return [
-      {
-        source: '/.env',
-        destination: '/404',
-        permanent: false,
-      },
-      {
-        source: '/.git',
-        destination: '/404',
-        permanent: false,
-      },
-    ];
+  // 🔧 修复：使用正确的配置名称
   },
-  
-  // 输出配置
-  trailingSlash: false,
-  cleanDistDir: true,
-  
-  // 实验性配置
-  experimental: {
-    optimizeCss: process.env.NODE_ENV === 'production',
+
+  // 🔧 新增：日志配置
+  logging: {
+    fetches: {
+      fullUrl: false, // 禁用完整URL日志，减少噪音
+    },
   },
-};
+
+  // 🔧 新增：生产环境禁用源地图
+  productionBrowserSourceMaps: false,
+}
+
+// 开发环境特定配置
+if (process.env.NODE_ENV === 'development') {
+  nextConfig.images.unoptimized = true;
+  
+  // 🔧 新增：开发环境优化
+  nextConfig.experimental = {
+    ...nextConfig.experimental,
+    // 开发环境启用更多调试功能
+    serverActions: true,
+  };
+}
+
+// 🔧 新增：生产环境特定优化
+if (process.env.NODE_ENV === 'production') {
+  // 生产环境禁用开发相关功能
+  
+  // 生产环境优化
+  nextConfig.compiler = {
+    ...nextConfig.compiler,
+    // 移除所有 console（除了 error）
+    removeConsole: {
+      exclude: ['error'],
+    },
+  };
+
+  // 🔧 新增：生产环境完全禁用预加载
+  nextConfig.experimental = {
+    ...nextConfig.experimental,
+    // 完全禁用预加载相关功能
+    optimizeCss: true,
+    optimizePackageImports: ['lucide-react', 'react-icons'],
+    serverExternalPackages: ['bcryptjs', 'jsonwebtoken'],
+    // 禁用所有预加载
+    staleTimes: {
+      dynamic: 0,
+      static: 0,
+    },
+  };
+}
 
 module.exports = nextConfig;

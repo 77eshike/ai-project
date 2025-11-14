@@ -1,62 +1,37 @@
-// src/lib/prisma.js - 完全修复版本
+// lib/prisma.js - 修复版本
 import { PrismaClient } from '@prisma/client'
 
-// 全局 Prisma 实例管理
-let prismaInstance = null
-let isConnecting = false
-let connectionPromise = null
+// 🔧 关键修复：简化的 Prisma 配置
+const globalForPrisma = globalThis
 
-async function getPrismaClient() {
-  if (prismaInstance) {
-    return prismaInstance
-  }
-
-  if (isConnecting) {
-    return connectionPromise
-  }
-
-  isConnecting = true
-  connectionPromise = initPrisma()
-  
-  try {
-    prismaInstance = await connectionPromise
-    return prismaInstance
-  } finally {
-    isConnecting = false
-  }
-}
-
-async function initPrisma() {
-  try {
-    console.log('🔌 初始化 Prisma 客户端...')
-    
-    const client = new PrismaClient({
-      log: process.env.NODE_ENV === 'development' 
-        ? ['query', 'error', 'warn'] 
-        : ['error'],
-      errorFormat: 'minimal'
-    })
-
-    await client.$connect()
-    console.log('✅ Prisma 数据库连接成功')
-    return client
-
-  } catch (error) {
-    console.error('❌ Prisma 数据库连接失败:', error.message)
-    throw error
-  }
-}
-
-// 创建真实的 Prisma 实例（用于 NextAuth 适配器）
-export const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' 
-    ? ['error', 'warn'] 
-    : ['error'],
+// 创建基础的 Prisma 客户端
+const prisma = globalForPrisma.prisma || new PrismaClient({
+  log: process.env.NODE_ENV === 'production' 
+    ? ['error'] 
+    : ['query', 'error', 'warn'],
   errorFormat: 'minimal'
 })
 
-// 导出获取客户端的方法
-export const getPrisma = getPrismaClient
+// 🔧 关键修复：移除可能导致问题的中间件
+// 在生产构建时不要添加复杂的中间件
 
-// 默认导出
-export default { prisma, getPrisma: getPrismaClient }
+if (process.env.NODE_ENV !== 'production') {
+  // 只在开发环境添加中间件
+  prisma.$use(async (params, next) => {
+    const start = Date.now()
+    const result = await next(params)
+    const end = Date.now()
+    console.log(`🔧 查询 ${params.model}.${params.action} 耗时 ${end - start}ms`)
+    return result
+  })
+  
+  globalForPrisma.prisma = prisma
+}
+
+// 连接数据库
+prisma.$connect()
+  .then(() => console.log('✅ 数据库连接成功'))
+  .catch(err => console.error('❌ 数据库连接失败:', err))
+
+export { prisma }
+export default prisma

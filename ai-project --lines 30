@@ -1,0 +1,17 @@
+○ pm2-root.service - PM2 process manager
+     Loaded: loaded (/etc/systemd/system/pm2-root.service; enabled; vendor preset: enabled)
+     Active: inactive (dead) since Wed 2025-09-17 19:44:15 CST; 1 month 14 days ago
+       Docs: https://pm2.keymetrics.io/
+   Main PID: 748 (code=exited, status=0/SUCCESS)
+        CPU: 4min 36.901s
+
+Sep 16 06:28:53 ls-317106-48478-48478 pm2[683]: │ 0  │ ai-project    │ default     │ 0.39.0  │ fork    │ 759      │ 0s     │ 0    │ online    │ 0%       │ 37.8mb   │ root     │ disabled │
+Sep 16 06:28:53 ls-317106-48478-48478 pm2[683]: └────┴───────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
+Sep 16 06:28:53 ls-317106-48478-48478 systemd[1]: Started PM2 process manager.
+Sep 17 19:44:14 ls-317106-48478-48478 pm2[1896255]: [PM2] Spawning PM2 daemon with pm2_home=/root/.pm2
+Sep 17 19:44:14 ls-317106-48478-48478 pm2[1896255]: [PM2] PM2 Successfully daemonized
+Sep 17 19:44:15 ls-317106-48478-48478 pm2[1896255]: [PM2][WARN] No process found
+Sep 17 19:44:15 ls-317106-48478-48478 pm2[1896255]: [PM2] [v] All Applications Stopped
+Sep 17 19:44:15 ls-317106-48478-48478 pm2[1896255]: [PM2] [v] PM2 Daemon Stopped
+Sep 17 19:44:15 ls-317106-48478-48478 systemd[1]: pm2-root.service: Deactivated successfully.
+Sep 17 19:44:15 ls-317106-48478-48478 systemd[1]: pm2-root.service: Consumed 4min 36.901s CPU time.
