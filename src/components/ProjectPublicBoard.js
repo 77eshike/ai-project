@@ -1,4 +1,4 @@
-// src/components/ProjectPublicBoard.js
+// src/components/ProjectPublicBoard.js - 完整修复版本
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
@@ -23,7 +23,6 @@ const ProjectPublicBoard = () => {
       
       if (response.ok) {
         const data = await response.json();
-        // 根据新的数据模型过滤项目
         const accessibleProjects = data.data?.projects || data.projects || [];
         setProjects(accessibleProjects);
       } else {
@@ -36,14 +35,14 @@ const ProjectPublicBoard = () => {
     }
   };
 
-  // 按状态分组项目 - 适配新数据模型
+  // 🔧 核心逻辑：所有未发布为正式项目的都是待定项目
   const draftProjects = projects.filter(p => p.projectType === 'DRAFT_PROJECT');
-  const recruitingProjects = projects.filter(p => 
-    p.projectType !== 'DRAFT_PROJECT' && p.status === 'RECRUITING'
-  );
-  const inProgressProjects = projects.filter(p => 
-    p.projectType !== 'DRAFT_PROJECT' && p.status === 'IN_PROGRESS'
-  );
+  
+  // 已发布的项目根据状态分类
+  const publishedProjects = projects.filter(p => p.projectType !== 'DRAFT_PROJECT');
+  const recruitingProjects = publishedProjects.filter(p => p.status === 'RECRUITING');
+  const inProgressProjects = publishedProjects.filter(p => p.status === 'IN_PROGRESS');
+  const completedProjects = publishedProjects.filter(p => p.status === 'COMPLETED');
 
   const ProjectCard = ({ project }) => (
     <div 
@@ -70,6 +69,17 @@ const ProjectPublicBoard = () => {
           {project.createdAt ? new Date(project.createdAt).toLocaleDateString('zh-CN') : '未知'}
         </span>
       </div>
+
+      {/* 项目类型标识 */}
+      <div className="mt-2 pt-2 border-t border-gray-100">
+        <span className={`inline-block px-2 py-1 text-xs rounded ${
+          project.projectType === 'DRAFT_PROJECT' 
+            ? 'bg-orange-100 text-orange-800' 
+            : 'bg-green-100 text-green-800'
+        }`}>
+          {project.projectType === 'DRAFT_PROJECT' ? '待定项目' : '正式项目'}
+        </span>
+      </div>
     </div>
   );
 
@@ -84,7 +94,7 @@ const ProjectPublicBoard = () => {
   return (
     <div className="space-y-8">
       {/* 筛选器 */}
-      <div className="flex space-x-4 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6">
         <button
           onClick={() => setFilter('ALL')}
           className={`px-4 py-2 rounded-lg ${
@@ -125,10 +135,20 @@ const ProjectPublicBoard = () => {
         >
           进行中 ({inProgressProjects.length})
         </button>
+        <button
+          onClick={() => setFilter('COMPLETED')}
+          className={`px-4 py-2 rounded-lg ${
+            filter === 'COMPLETED' 
+              ? 'bg-gray-600 text-white' 
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          已完成 ({completedProjects.length})
+        </button>
       </div>
 
       {/* 看板布局 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* 待定项目区 */}
         <div className="bg-orange-50 rounded-lg p-6">
           <div className="flex items-center space-x-2 mb-4">
@@ -139,7 +159,7 @@ const ProjectPublicBoard = () => {
             </span>
           </div>
           <p className="text-sm text-orange-600 mb-4">
-            公开征集意见，欢迎参与讨论和改进
+            🔧 未发布为正式项目的都在这里，欢迎参与讨论和改进
           </p>
           <div className="space-y-4">
             {draftProjects.map(project => (
@@ -163,7 +183,7 @@ const ProjectPublicBoard = () => {
             </span>
           </div>
           <p className="text-sm text-green-600 mb-4">
-            正式项目招募成员，欢迎加入团队
+            👥 正式项目招募成员，欢迎加入团队
           </p>
           <div className="space-y-4">
             {recruitingProjects.map(project => (
@@ -187,7 +207,7 @@ const ProjectPublicBoard = () => {
             </span>
           </div>
           <p className="text-sm text-purple-600 mb-4">
-            项目执行进展，跟踪最新动态
+            🚀 项目执行进展，跟踪最新动态
           </p>
           <div className="space-y-4">
             {inProgressProjects.map(project => (
@@ -196,6 +216,30 @@ const ProjectPublicBoard = () => {
             {inProgressProjects.length === 0 && (
               <div className="text-center py-8 text-purple-500 text-sm">
                 暂无进行中项目
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 已完成项目区 */}
+        <div className="bg-gray-50 rounded-lg p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <div className="w-3 h-3 bg-gray-500 rounded-full"></div>
+            <h2 className="text-lg font-semibold text-gray-800">已完成项目区</h2>
+            <span className="bg-gray-200 text-gray-800 px-2 py-1 rounded-full text-sm">
+              {completedProjects.length}
+            </span>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            ✅ 项目成果展示，总结经验教训
+          </p>
+          <div className="space-y-4">
+            {completedProjects.map(project => (
+              <ProjectCard key={project.id} project={project} />
+            ))}
+            {completedProjects.length === 0 && (
+              <div className="text-center py-8 text-gray-500 text-sm">
+                暂无已完成项目
               </div>
             )}
           </div>

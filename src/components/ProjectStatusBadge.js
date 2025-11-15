@@ -1,4 +1,4 @@
-//src/components/ProjectStatusBadge.js
+// src/components/ProjectStatusBadge.js - 完整修复版本
 export default function ProjectStatusBadge({ project }) {
   if (!project) return null;
 
@@ -17,10 +17,10 @@ export default function ProjectStatusBadge({ project }) {
   };
 
   const typeConfig = {
-    DRAFT_PROJECT: { color: 'bg-orange-100 text-orange-800', label: '待定项目' },
-    STANDARD_PROJECT: { color: 'bg-blue-100 text-blue-800', label: '标准项目' },
-    TEAM_PROJECT: { color: 'bg-purple-100 text-purple-800', label: '团队项目' },
-    RESEARCH_PROJECT: { color: 'bg-green-100 text-green-800', label: '研究项目' }
+    DRAFT_PROJECT: { color: 'bg-orange-100 text-orange-800', label: '待定项目', icon: '🔧' },
+    STANDARD_PROJECT: { color: 'bg-blue-100 text-blue-800', label: '标准项目', icon: '📋' },
+    TEAM_PROJECT: { color: 'bg-purple-100 text-purple-800', label: '团队项目', icon: '👥' },
+    RESEARCH_PROJECT: { color: 'bg-green-100 text-green-800', label: '研究项目', icon: '🔬' }
   };
 
   const status = statusConfig[project.status] || statusConfig.DRAFT;
@@ -28,9 +28,13 @@ export default function ProjectStatusBadge({ project }) {
 
   return (
     <div className="flex flex-wrap gap-2">
+      {/* 项目类型徽章 */}
       <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${type.color}`}>
+        <span className="mr-1">{type.icon}</span>
         {type.label}
       </span>
+      
+      {/* 项目状态徽章 */}
       <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${status.color}`}>
         <span className="mr-1">{status.icon}</span>
         {status.label}

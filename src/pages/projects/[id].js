@@ -6,6 +6,8 @@ import Head from 'next/head';
 import ProjectStatusBadge from '../../components/ProjectStatusBadge';
 import ProjectPublishButton from '../../components/ProjectPublishButton';
 import FormattingPreview from '../../components/FormattingPreview';
+import ProjectDiscussion from '../../components/ProjectDiscussion';
+import ProjectSettings from '../../components/ProjectSettings';
 
 const CONFIG = {
   RETRY_DELAY: 3000,
@@ -146,6 +148,10 @@ export default function ProjectDetailPage() {
     loadProject();
   };
 
+  const handleSettingsUpdate = (updatedProject) => {
+    setProject(updatedProject);
+  };
+
   const handleLoginRedirect = () => {
     const currentPath = `/projects/${projectId}`;
     router.push(`/auth/signin?callbackUrl=${encodeURIComponent(currentPath)}`);
@@ -158,7 +164,11 @@ export default function ProjectDetailPage() {
     loadProject();
   };
 
-  const isOwner = session?.user?.id === project?.authorId;
+  const handleBack = () => {
+    router.back();
+  };
+
+  const isOwner = session?.user?.id === project?.authorId || session?.user?.id === project?.ownerId;
   const canEdit = isOwner || project?.collaborators?.some(
     collab => collab.userId === session?.user?.id && collab.role === 'EDITOR'
   );
@@ -326,6 +336,26 @@ export default function ProjectDetailPage() {
         {/* 项目头部 */}
         <div className="bg-white border-b shadow-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            {/* 🔧 修复：添加明确的返回按钮 */}
+            <div className="flex items-center space-x-4 mb-4">
+              <button
+                onClick={handleBack}
+                className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                <span>返回</span>
+              </button>
+              <div className="h-6 border-l border-gray-300"></div>
+              <button
+                onClick={() => router.push('/projects')}
+                className="text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                项目列表
+              </button>
+            </div>
+
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center space-x-3 mb-2">
@@ -434,9 +464,46 @@ export default function ProjectDetailPage() {
                     <div 
                       dangerouslySetInnerHTML={{ __html: project.aiFormattedContent }} 
                     />
+                  ) : project.content ? (
+                    <pre className="whitespace-pre-wrap font-sans text-gray-700 bg-gray-50 p-4 rounded-lg">
+                      {project.content}
+                    </pre>
                   ) : (
-                    <pre className="whitespace-pre-wrap font-sans">{project.content}</pre>
+                    <div className="text-center py-8 text-gray-500">
+                      <div className="text-4xl mb-2">📝</div>
+                      <p>暂无项目内容</p>
+                      <p className="text-sm mt-2">
+                        请切换到 <span className="text-blue-600 font-medium">AI格式化</span> 标签页来完善项目内容
+                      </p>
+                    </div>
                   )}
+                </div>
+              </div>
+
+              {/* 项目统计信息 */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white rounded-lg border p-4">
+                  <h3 className="font-medium text-gray-700 mb-2">项目类型</h3>
+                  <p className="text-lg font-semibold text-blue-600">
+                    {project.projectType === 'DRAFT_PROJECT' ? '待定项目' : 
+                     project.projectType === 'STANDARD_PROJECT' ? '标准项目' :
+                     project.projectType === 'TEAM_PROJECT' ? '团队项目' :
+                     project.projectType === 'RESEARCH_PROJECT' ? '研究项目' : '项目'}
+                  </p>
+                </div>
+                
+                <div className="bg-white rounded-lg border p-4">
+                  <h3 className="font-medium text-gray-700 mb-2">评审进度</h3>
+                  <p className="text-lg font-semibold text-green-600">
+                    第 {project.currentReviewRound || 1} 轮 / 共 {project.maxReviewRounds || 3} 轮
+                  </p>
+                </div>
+                
+                <div className="bg-white rounded-lg border p-4">
+                  <h3 className="font-medium text-gray-700 mb-2">成员数量</h3>
+                  <p className="text-lg font-semibold text-purple-600">
+                    {project.memberCount || 1} 人
+                  </p>
                 </div>
               </div>
 
@@ -458,25 +525,14 @@ export default function ProjectDetailPage() {
           )}
 
           {activeTab === 'discussion' && (
-            <div className="bg-white rounded-lg border p-6">
-              <h2 className="text-xl font-semibold mb-4">项目讨论</h2>
-              {project.allowPublicComments ? (
-                <div>
-                  <p className="text-gray-600">评论功能开发中...</p>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <p>此项目暂未开启公开评论功能</p>
-                </div>
-              )}
-            </div>
+            <ProjectDiscussion projectId={projectId} />
           )}
 
           {activeTab === 'settings' && canEdit && (
-            <div className="bg-white rounded-lg border p-6">
-              <h2 className="text-xl font-semibold mb-4">项目设置</h2>
-              <p className="text-gray-600">项目设置功能开发中...</p>
-            </div>
+            <ProjectSettings 
+              project={project}
+              onUpdate={handleSettingsUpdate}
+            />
           )}
         </div>
       </div>

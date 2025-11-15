@@ -1,4 +1,4 @@
-// /opt/ai-project/src/pages/api/projects/[id]/comments.js - 修复String ID版本
+// src/pages/api/projects/[id]/comments.js - 完整修复版本
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../lib/auth";
 import { prisma } from '../../../../lib/prisma';
@@ -10,7 +10,7 @@ const CONFIG = {
   MIN_COMMENT_LENGTH: 2,
   MAX_PAGE_SIZE: 100,
   DEFAULT_PAGE_SIZE: 20,
-  CACHE_DURATION: 2 * 60 * 1000, // 2分钟缓存
+  CACHE_DURATION: 2 * 60 * 1000,
   ALLOWED_ORIGINS: [
     'https://localhost:3001',
     'http://localhost:3001',
@@ -21,8 +21,8 @@ const CONFIG = {
     'https://localhost:3000'
   ],
   RATE_LIMIT: {
-    WINDOW_MS: 60 * 1000, // 1分钟
-    MAX_REQUESTS: 10 // 最大请求数
+    WINDOW_MS: 60 * 1000,
+    MAX_REQUESTS: 10
   }
 };
 
@@ -35,20 +35,14 @@ class TextSanitizer {
     if (!text) return '';
     
     let cleaned = String(text)
-      // 移除控制字符
       .replace(/[\x00-\x1F\x7F]/g, '')
-      // 移除 Unicode 控制字符
       .replace(/[\u200B-\u200D\uFEFF]/g, '')
-      // 移除转义序列
       .replace(/\\[^u]/g, '')
       .replace(/\\u[0-9A-Fa-f]{4}/g, '')
-      // 移除 HTML 标签
       .replace(/<[^>]*>/g, '')
-      // 移除多余的空白字符
       .replace(/\s+/g, ' ')
       .trim();
     
-    // 限制长度
     if (maxLength && cleaned.length > maxLength) {
       cleaned = cleaned.substring(0, maxLength);
     }
@@ -75,8 +69,7 @@ class TextSanitizer {
       throw new Error(`评论内容不能超过${CONFIG.MAX_COMMENT_LENGTH}个字符`);
     }
 
-    // 检查敏感词（可选）
-    const sensitiveWords = ['赌博', '诈骗', '色情']; // 示例敏感词
+    const sensitiveWords = ['赌博', '诈骗', '色情'];
     const hasSensitiveWord = sensitiveWords.some(word => 
       cleanContent.toLowerCase().includes(word.toLowerCase())
     );
@@ -94,7 +87,6 @@ function checkRateLimit(identifier) {
   const now = Date.now();
   const windowStart = now - CONFIG.RATE_LIMIT.WINDOW_MS;
   
-  // 清理过期记录
   for (const [key, timestamps] of requestCounts.entries()) {
     const validTimestamps = timestamps.filter(time => time > windowStart);
     if (validTimestamps.length === 0) {
@@ -104,7 +96,6 @@ function checkRateLimit(identifier) {
     }
   }
   
-  // 检查当前请求
   const userTimestamps = requestCounts.get(identifier) || [];
   const recentRequests = userTimestamps.filter(time => time > windowStart);
   
@@ -131,8 +122,9 @@ async function validateProjectAccess(projectId, userId) {
         { projectMembers: { some: { userId: userId } } },
         { visibility: 'PUBLIC' }
       ],
+      // 🔧 关键修复：使用有效的 ProjectStatus 枚举值
       status: { 
-        notIn: ['DELETED', 'ARCHIVED'] 
+        notIn: ['ARCHIVED'] // 只排除已归档的项目
       }
     },
     select: { 
@@ -140,12 +132,27 @@ async function validateProjectAccess(projectId, userId) {
       title: true,
       status: true,
       visibility: true,
-      ownerId: true
+      ownerId: true,
+      allowPublicComments: true
     }
   });
 
   if (!project) {
     throw new Error('项目不存在或无权访问');
+  }
+
+  // 检查评论权限
+  if (!project.allowPublicComments) {
+    const isMember = await prisma.projectMember.findFirst({
+      where: {
+        projectId: projectId,
+        userId: userId
+      }
+    });
+    
+    if (!isMember && project.ownerId !== userId) {
+      throw new Error('此项目未开启公开评论功能');
+    }
   }
 
   return project;
@@ -187,7 +194,6 @@ export default async function handler(req, res) {
     timestamp: new Date().toISOString()
   });
 
-  // 设置 CORS 头
   setCorsHeaders(req, res);
 
   if (req.method === 'OPTIONS') {
@@ -195,7 +201,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 验证 HTTP 方法
     if (!CONFIG.ALLOWED_METHODS.includes(req.method)) {
       return res.status(405).json({ 
         success: false,
@@ -228,7 +233,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // 🔧 修复：直接使用String ID，不进行数字转换
     const userId = session.user.id;
     if (typeof userId !== 'string' || userId.trim().length === 0) {
       console.error('❌ 无效的用户ID:', session.user.id);
@@ -240,7 +244,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // 检查限流（POST 和 DELETE 操作）
     if (['POST', 'DELETE'].includes(req.method)) {
       const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
       const identifier = `${clientIP}-${userId}`;
@@ -258,11 +261,9 @@ export default async function handler(req, res) {
 
     console.log(`🔍 [${requestId}] 验证项目权限:`, { projectId, userId });
 
-    // 验证项目访问权限
     const project = await validateProjectAccess(projectId, userId);
     console.log(`✅ [${requestId}] 项目权限验证通过:`, project.title);
 
-    // 处理不同HTTP方法
     switch (req.method) {
       case 'POST':
         return await handlePostComment(req, res, projectId, userId, requestId);
@@ -285,7 +286,6 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error(`❌ [${requestId}] 项目评论API错误:`, error);
     
-    // 错误处理
     let errorMessage = '服务器内部错误';
     let statusCode = 500;
     let errorCode = 'INTERNAL_ERROR';
@@ -310,6 +310,10 @@ export default async function handler(req, res) {
       errorMessage = '数据关系错误';
       statusCode = 400;
       errorCode = 'RELATIONSHIP_ERROR';
+    } else if (error.code === 'P2030') {
+      errorMessage = '数据库字段验证失败';
+      statusCode = 400;
+      errorCode = 'FIELD_VALIDATION_ERROR';
     }
     
     return res.status(statusCode).json({ 
@@ -328,7 +332,6 @@ export default async function handler(req, res) {
 
 // 🔧 处理发表评论
 async function handlePostComment(req, res, projectId, userId, requestId) {
-  // 解析请求体
   let body;
   try {
     body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
@@ -343,20 +346,18 @@ async function handlePostComment(req, res, projectId, userId, requestId) {
 
   const { content, parentId } = body;
 
-  // 验证评论内容
   const cleanContent = TextSanitizer.validateCommentContent(content);
 
-  // 验证父评论（如果存在）
   if (parentId) {
     const parentComment = await prisma.projectComment.findUnique({
       where: { 
         id: parentId,
-        projectId: projectId // 确保父评论属于当前项目
+        projectId: projectId
       },
       select: { 
         id: true, 
         projectId: true,
-        parentId: true // 防止嵌套回复
+        parentId: true
       }
     });
 
@@ -369,7 +370,6 @@ async function handlePostComment(req, res, projectId, userId, requestId) {
       });
     }
 
-    // 防止多层嵌套回复
     if (parentComment.parentId) {
       return res.status(400).json({
         success: false,
@@ -387,9 +387,7 @@ async function handlePostComment(req, res, projectId, userId, requestId) {
     parentId: parentId || null
   });
 
-  // 使用事务确保数据一致性
   const comment = await prisma.$transaction(async (tx) => {
-    // 创建评论
     const newComment = await tx.projectComment.create({
       data: {
         projectId: projectId,
@@ -420,15 +418,6 @@ async function handlePostComment(req, res, projectId, userId, requestId) {
             }
           }
         })
-      }
-    });
-
-    // 更新项目评论计数
-    await tx.project.update({
-      where: { id: projectId },
-      data: {
-        commentCount: { increment: 1 },
-        updatedAt: new Date()
       }
     });
 
@@ -480,7 +469,6 @@ async function handleGetComments(req, res, projectId, requestId) {
     sortOrder
   });
 
-  // 验证排序参数
   const validSortFields = ['createdAt', 'updatedAt'];
   const sortField = validSortFields.includes(sortBy) ? sortBy : 'createdAt';
   const sortDirection = sortOrder === 'asc' ? 'asc' : 'desc';
@@ -510,7 +498,7 @@ async function handleGetComments(req, res, projectId, requestId) {
               }
             },
             orderBy: { createdAt: 'asc' },
-            take: 50 // 限制回复数量
+            take: 50
           }
         }),
         _count: {
@@ -583,7 +571,6 @@ async function handleDeleteComment(req, res, projectId, userId, requestId) {
 
   console.log(`🗑️ [${requestId}] 删除评论:`, { commentId, userId });
 
-  // 查找评论并验证权限
   const comment = await prisma.projectComment.findUnique({
     where: { id: commentId },
     include: {
@@ -607,7 +594,6 @@ async function handleDeleteComment(req, res, projectId, userId, requestId) {
     });
   }
 
-  // 验证权限：评论作者或项目所有者可以删除
   const isCommentAuthor = comment.userId === userId;
   const isProjectOwner = comment.project.ownerId === userId;
 
@@ -620,28 +606,15 @@ async function handleDeleteComment(req, res, projectId, userId, requestId) {
     });
   }
 
-  // 使用事务删除评论和相关数据
   await prisma.$transaction(async (tx) => {
-    // 如果有回复，先删除所有回复
     if (comment._count.replies > 0) {
       await tx.projectComment.deleteMany({
         where: { parentId: commentId }
       });
     }
 
-    // 删除主评论
     await tx.projectComment.delete({
       where: { id: commentId }
-    });
-
-    // 更新项目评论计数
-    const totalDeleted = 1 + comment._count.replies; // 主评论 + 所有回复
-    await tx.project.update({
-      where: { id: projectId },
-      data: {
-        commentCount: { decrement: totalDeleted },
-        updatedAt: new Date()
-      }
     });
   });
 
@@ -657,7 +630,6 @@ async function handleDeleteComment(req, res, projectId, userId, requestId) {
   });
 }
 
-// 🔧 API 配置
 export const config = {
   api: {
     bodyParser: {
