@@ -1,3 +1,4 @@
+// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -131,25 +132,42 @@ model Conversation {
 }
 
 model Project {
-  id                String            @id @default(cuid())
-  title             String            @db.VarChar(500)
+  id                String           @id @default(cuid())
+  title             String           @db.VarChar(500)
   description       String?
-  ownerId           String
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
   content           String?
+  
+  // 🔧 更新核心字段
+  projectType       ProjectType      @default(DRAFT_PROJECT)
+  status            ProjectStatus    @default(IN_REVIEW)
+  
+  // 🔧 新增AI格式化字段
+  aiFormattedContent String?
+  formattingStatus   FormattingStatus @default(NOT_STARTED)
+  formattingTemplate String?
+  formattingHistory  Json?
+  
+  // 🔧 新增评审流程字段
+  currentReviewRound Int             @default(1)
+  maxReviewRounds    Int             @default(3)
+  allowPublicComments Boolean        @default(true)
+  
+  // 现有其他字段
+  ownerId           String
+  visibility        ProjectVisibility @default(PUBLIC)
   knowledgeSourceId String?
   metadata          Json?
-  status            ProjectStatus     @default(DRAFT)
-  type              ProjectType       @default(STANDARD_PROJECT)
-  visibility        ProjectVisibility @default(PRIVATE)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  // 关系保持不变
   projectMembers    ProjectMember[]
   knowledgeSource   Knowledge?        @relation("KnowledgeGeneratedProjects", fields: [knowledgeSourceId], references: [id])
   owner             User              @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   projectComments   ProjectComment[]
 
   @@index([ownerId])
-  @@index([type])
+  @@index([projectType])
   @@index([status])
   @@index([visibility])
   @@index([knowledgeSourceId])
@@ -230,6 +248,7 @@ model ApiRequest {
   @@index([timestamp])
 }
 
+// 🔧 更新枚举定义
 enum UserRole {
   USER
   ADMIN
@@ -242,17 +261,24 @@ enum UserStatus {
   SUSPENDED
 }
 
+// 🔧 重新设计项目类型枚举
+enum ProjectType {
+  DRAFT_PROJECT
+  STANDARD_PROJECT
+  TEAM_PROJECT
+  RESEARCH_PROJECT
+}
+
+// 🔧 重新设计状态枚举，支持完整流转
 enum ProjectStatus {
   DRAFT
+  IN_REVIEW
+  FINALIZING
+  RECRUITING
   IN_PROGRESS
   COMPLETED
   ARCHIVED
-}
-
-enum ProjectType {
-  STANDARD_PROJECT
-  RESEARCH_PROJECT
-  DEVELOPMENT_PROJECT
+  FAILED
 }
 
 enum ProjectVisibility {
@@ -272,4 +298,12 @@ enum CommentStatus {
   ACTIVE
   DELETED
   HIDDEN
+}
+
+// 🔧 新增AI格式化状态
+enum FormattingStatus {
+  NOT_STARTED
+  PROCESSING
+  COMPLETED
+  FAILED
 }
