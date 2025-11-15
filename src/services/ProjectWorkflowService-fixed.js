@@ -1,4 +1,3 @@
-// src/services/ProjectWorkflowService.js
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
@@ -95,6 +94,7 @@ class ProjectWorkflowService {
     const prompt = this.buildFormattingPrompt(content, template);
     
     console.log(`🤖 调用AI服务: ${process.env.OPENAI_BASE_URL}`);
+    console.log(`📨 请求内容长度: ${prompt.length} 字符`);
     
     try {
       const response = await fetch(`${process.env.OPENAI_BASE_URL}/chat/completions`, {
@@ -120,12 +120,21 @@ class ProjectWorkflowService {
         })
       });
       
+      console.log(`📨 AI服务响应状态: ${response.status}`);
+      
       if (!response.ok) {
         const errorText = await response.text();
+        console.error(`❌ AI服务调用失败: ${response.status}`, errorText);
         throw new Error(`AI服务调用失败: ${response.status}`);
       }
       
       const data = await response.json();
+      console.log(`📊 AI服务响应数据:`, {
+        hasChoices: !!data.choices,
+        choicesLength: data.choices?.length || 0,
+        hasMessage: !!data.choices?.[0]?.message,
+        hasContent: !!data.choices?.[0]?.message?.content
+      });
       
       // 修复：使用更安全的属性访问
       if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
