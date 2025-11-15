@@ -1,4 +1,4 @@
-// src/pages/dashboard.js - 完整用户信息修复版本
+// src/pages/dashboard.js - 优化版本（集成项目公共看板）
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
@@ -8,6 +8,7 @@ import Head from 'next/head';
 import DashboardLayout from '../components/DashboardLayout';
 import OverviewTab from '../components/OverviewTab';
 import ProjectsTab from '../components/ProjectsTab';
+import ProjectPublicBoard from '../components/ProjectPublicBoard'; // 新增公共看板组件
 import ChatTab from '../components/chat';
 import KnowledgeTab from '../components/KnowledgeTab';
 import SettingsTab from '../components/SettingsTab';
@@ -16,6 +17,7 @@ const CONFIG = {
   TABS: {
     OVERVIEW: 'overview',
     PROJECTS: 'projects', 
+    PROJECTS_PUBLIC: 'projects-public', // 新增公共看板标签
     CHAT: 'chat',
     KNOWLEDGE: 'knowledge',
     SETTINGS: 'settings'
@@ -32,10 +34,16 @@ const TAB_CONFIG = {
     description: '查看项目概览和统计信息'
   },
   [CONFIG.TABS.PROJECTS]: { 
-    title: '项目', 
+    title: '我的项目', 
     component: ProjectsTab, 
     icon: '📁',
-    description: '管理您的项目'
+    description: '管理您的个人项目'
+  },
+  [CONFIG.TABS.PROJECTS_PUBLIC]: { 
+    title: '项目看板', 
+    component: ProjectPublicBoard, 
+    icon: '📋',
+    description: '浏览社区项目和参与机会'
   },
   [CONFIG.TABS.CHAT]: { 
     title: 'AI对话', 
@@ -103,6 +111,97 @@ const useDeviceDetection = (isClient) => {
   return isMobile;
 };
 
+// 新增：项目统计信息组件
+const ProjectStats = ({ projects = [] }) => {
+  const stats = useMemo(() => {
+    const draftProjects = projects.filter(p => p.projectType === 'DRAFT_PROJECT');
+    const formalProjects = projects.filter(p => p.projectType !== 'DRAFT_PROJECT');
+    const recruitingProjects = formalProjects.filter(p => p.status === 'RECRUITING');
+    const inProgressProjects = formalProjects.filter(p => p.status === 'IN_PROGRESS');
+
+    return {
+      total: projects.length,
+      draft: draftProjects.length,
+      formal: formalProjects.length,
+      recruiting: recruitingProjects.length,
+      inProgress: inProgressProjects.length
+    };
+  }, [projects]);
+
+  if (stats.total === 0) return null;
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      <div className="bg-white rounded-lg p-4 border border-gray-200 text-center">
+        <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
+        <div className="text-sm text-gray-600">总项目</div>
+      </div>
+      <div className="bg-white rounded-lg p-4 border border-gray-200 text-center">
+        <div className="text-2xl font-bold text-orange-600">{stats.draft}</div>
+        <div className="text-sm text-gray-600">待定项目</div>
+      </div>
+      <div className="bg-white rounded-lg p-4 border border-gray-200 text-center">
+        <div className="text-2xl font-bold text-green-600">{stats.formal}</div>
+        <div className="text-sm text-gray-600">正式项目</div>
+      </div>
+      <div className="bg-white rounded-lg p-4 border border-gray-200 text-center">
+        <div className="text-2xl font-bold text-purple-600">{stats.recruiting}</div>
+        <div className="text-sm text-gray-600">招募中</div>
+      </div>
+      <div className="bg-white rounded-lg p-4 border border-gray-200 text-center">
+        <div className="text-2xl font-bold text-indigo-600">{stats.inProgress}</div>
+        <div className="text-sm text-gray-600">进行中</div>
+      </div>
+    </div>
+  );
+};
+
+// 新增：快速操作面板
+const QuickActions = ({ user, onNavigate }) => {
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">快速操作</h3>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <button
+          onClick={() => onNavigate('/projects/new')}
+          className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-all"
+        >
+          <div className="text-2xl mb-2">🚀</div>
+          <span className="font-medium text-gray-900">新建项目</span>
+          <span className="text-sm text-gray-600 mt-1">创建新项目</span>
+        </button>
+        
+        <button
+          onClick={() => onNavigate('/dashboard?tab=chat&action=generate-project')}
+          className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:bg-purple-50 hover:border-purple-300 transition-all"
+        >
+          <div className="text-2xl mb-2">💬</div>
+          <span className="font-medium text-gray-900">AI生成</span>
+          <span className="text-sm text-gray-600 mt-1">从对话生成项目</span>
+        </button>
+        
+        <button
+          onClick={() => onNavigate(`/dashboard?tab=${CONFIG.TABS.PROJECTS_PUBLIC}`)}
+          className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:bg-green-50 hover:border-green-300 transition-all"
+        >
+          <div className="text-2xl mb-2">👥</div>
+          <span className="font-medium text-gray-900">浏览项目</span>
+          <span className="text-sm text-gray-600 mt-1">查看社区项目</span>
+        </button>
+        
+        <button
+          onClick={() => onNavigate('/knowledge/new')}
+          className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:bg-orange-50 hover:border-orange-300 transition-all"
+        >
+          <div className="text-2xl mb-2">📚</div>
+          <span className="font-medium text-gray-900">添加知识</span>
+          <span className="text-sm text-gray-600 mt-1">丰富知识库</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default function Dashboard({ session: serverSession }) {
   const router = useRouter();
   const { data: session, status, update: updateSession } = useSession();
@@ -113,6 +212,7 @@ export default function Dashboard({ session: serverSession }) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
+  const [projects, setProjects] = useState([]); // 新增：项目数据状态
 
   // 🔧 客户端检测
   useEffect(() => {
@@ -142,6 +242,9 @@ export default function Dashboard({ session: serverSession }) {
           });
           setAuthChecked(true);
           setRedirecting(false);
+          
+          // 加载项目数据用于统计
+          loadProjectsForStats();
         }
         break;
 
@@ -160,6 +263,20 @@ export default function Dashboard({ session: serverSession }) {
         break;
     }
   }, [status, session, router, isClient, redirecting, updateSession]);
+
+  // 新增：加载项目数据用于统计
+  const loadProjectsForStats = useCallback(async () => {
+    try {
+      const response = await fetch('/api/projects?limit=100');
+      if (response.ok) {
+        const data = await response.json();
+        const projectsData = data.data?.projects || data.projects || [];
+        setProjects(projectsData);
+      }
+    } catch (error) {
+      console.error('加载项目统计失败:', error);
+    }
+  }, []);
 
   // 🔧 关键修复：完整的用户数据
   const currentUser = useMemo(() => {
@@ -261,6 +378,21 @@ export default function Dashboard({ session: serverSession }) {
     }
   }, [logout, isLoggingOut]);
 
+  // 新增：导航处理
+  const handleNavigate = useCallback((path) => {
+    if (path.startsWith('/')) {
+      router.push(path);
+    } else {
+      const [pathname, query] = path.split('?');
+      const searchParams = new URLSearchParams(query);
+      const queryObj = {};
+      for (const [key, value] of searchParams.entries()) {
+        queryObj[key] = value;
+      }
+      router.push({ pathname, query: queryObj });
+    }
+  }, [router]);
+
   // 🔧 渲染当前活动标签页
   const renderActiveTab = useMemo(() => {
     if (!isClient) {
@@ -291,6 +423,13 @@ export default function Dashboard({ session: serverSession }) {
     let tabProps = { user: currentUser };
     
     switch (activeTab) {
+      case CONFIG.TABS.OVERVIEW:
+        tabProps = { 
+          ...tabProps, 
+          projects, // 传递项目数据用于概览显示
+          onNavigate: handleNavigate 
+        };
+        break;
       case CONFIG.TABS.CHAT:
         tabProps = { ...tabProps, voiceEnabled, toggleVoice };
         break;
@@ -311,18 +450,116 @@ export default function Dashboard({ session: serverSession }) {
   }, [
     activeTab, 
     currentUser,
+    projects,
     voiceEnabled, 
     toggleVoice, 
     isLoggingOut, 
     handleLogout, 
     isClient, 
-    handleTabChange
+    handleTabChange,
+    handleNavigate
   ]);
 
   const pageTitle = useMemo(() => {
     const tabTitle = TAB_CONFIG[activeTab]?.title || '控制台';
     return `${tabTitle} - AI项目平台`;
   }, [activeTab]);
+
+  // 新增：增强的概览标签页内容
+  const EnhancedOverviewTab = useMemo(() => {
+    return function EnhancedOverview({ user, projects, onNavigate }) {
+      return (
+        <div className="space-y-6">
+          {/* 欢迎横幅 */}
+          <div className="bg-gradient-to-r from-blue-600 to-purple-700 rounded-lg p-6 text-white">
+            <h1 className="text-2xl font-bold mb-2">
+              欢迎回来，{user?.name || '用户'}！
+            </h1>
+            <p className="opacity-90">
+              今天有什么新的想法或项目要开始吗？
+            </p>
+          </div>
+
+          {/* 快速操作 */}
+          <QuickActions user={user} onNavigate={onNavigate} />
+
+          {/* 项目统计 */}
+          <ProjectStats projects={projects} />
+
+          {/* 主要内容 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 最近项目 */}
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <span className="mr-2">📋</span>
+                最近项目
+              </h3>
+              {projects.slice(0, 5).map(project => (
+                <div key={project.id} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
+                  <div>
+                    <h4 className="font-medium text-gray-900">{project.title}</h4>
+                    <p className="text-sm text-gray-600">{project.description}</p>
+                  </div>
+                  <button
+                    onClick={() => onNavigate(`/projects/${project.id}`)}
+                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  >
+                    查看
+                  </button>
+                </div>
+              ))}
+              {projects.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <p>暂无项目</p>
+                  <button
+                    onClick={() => onNavigate('/projects/new')}
+                    className="mt-2 text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  >
+                    创建第一个项目
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 系统状态 */}
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <span className="mr-2">🚀</span>
+                AI功能状态
+              </h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-700">项目格式化</span>
+                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">可用</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-700">智能发布</span>
+                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">可用</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-700">知识库集成</span>
+                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">可用</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-700">团队协作</span>
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">测试中</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+  }, []);
+
+  // 替换概览标签页组件
+  const actualTabConfig = useMemo(() => {
+    const config = { ...TAB_CONFIG };
+    if (activeTab === CONFIG.TABS.OVERVIEW) {
+      config[CONFIG.TABS.OVERVIEW].component = EnhancedOverviewTab;
+    }
+    return config;
+  }, [activeTab, EnhancedOverviewTab]);
 
   if (!isClient || status === 'loading' || userLoading) {
     return (
@@ -383,7 +620,7 @@ export default function Dashboard({ session: serverSession }) {
     <>
       <Head>
         <title>{pageTitle}</title>
-        <meta name="description" content={TAB_CONFIG[activeTab]?.description || "AI项目平台控制面板"} />
+        <meta name="description" content={actualTabConfig[activeTab]?.description || "AI项目平台控制面板"} />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </Head>
 
@@ -396,7 +633,7 @@ export default function Dashboard({ session: serverSession }) {
           onLogout={handleLogout}
           isLoggingOut={isLoggingOut}
           availableTabs={CONFIG.TABS}
-          tabConfig={TAB_CONFIG}
+          tabConfig={actualTabConfig}
         >
           {renderActiveTab}
         </DashboardLayout>

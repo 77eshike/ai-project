@@ -1,4 +1,4 @@
-// src/pages/api/projects/[id].js - 修复String ID版本
+// src/pages/api/projects/[id].js - 修复_count字段
 import { getServerSession } from "next-auth/next";
 
 // 直接导入认证配置
@@ -80,7 +80,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // 🔧 修复：直接使用String ID，不转换为数字
     const userId = session.user.id;
     if (typeof userId !== 'string' || userId.trim().length === 0) {
       return res.status(400).json({ 
@@ -123,6 +122,9 @@ export default async function handler(req, res) {
     } else if (error.code === 'P1017') {
       errorMessage = '数据库连接失败';
       statusCode = 503;
+    } else if (error.message?.includes('Unknown field')) {
+      errorMessage = `数据模型字段错误: ${error.message}`;
+      statusCode = 400;
     }
     
     return res.status(statusCode).json({ 
@@ -153,7 +155,7 @@ async function handleGetProject(req, res, projectId, userId, requestId) {
             email: true 
           }
         },
-        projectMembers: {
+        projectMembers: { // 🔧 修复：使用 projectMembers 而不是 collaborators
           include: {
             user: {
               select: { 
@@ -164,9 +166,25 @@ async function handleGetProject(req, res, projectId, userId, requestId) {
             }
           }
         },
+        projectComments: { // 🔧 修复：使用 projectComments 而不是 comments
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 10
+        },
         _count: {
           select: {
-            projectMembers: true
+            projectMembers: true, // 🔧 修复：使用 projectMembers 而不是 collaborators
+            projectComments: true  // 🔧 修复：使用 projectComments 而不是 comments
           }
         }
       }
@@ -186,21 +204,26 @@ async function handleGetProject(req, res, projectId, userId, requestId) {
       title: project.title,
       description: project.description,
       content: project.content,
-      type: project.type,
+      aiFormattedContent: project.aiFormattedContent,
+      projectType: project.projectType,
       status: project.status,
+      formattingStatus: project.formattingStatus,
+      formattingTemplate: project.formattingTemplate,
+      currentReviewRound: project.currentReviewRound,
+      allowPublicComments: project.allowPublicComments,
+      isPublic: project.visibility === 'PUBLIC',
       visibility: project.visibility,
+      authorId: project.ownerId,
+      author: project.owner,
       ownerId: project.ownerId,
       owner: project.owner,
+      collaborators: project.projectMembers, // 🔧 修复：映射到 collaborators 以保持前端兼容
+      comments: project.projectComments,     // 🔧 修复：映射到 comments 以保持前端兼容
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString(),
       isOwner: project.ownerId === userId,
-      memberCount: project._count.projectMembers,
-      members: project.projectMembers.map(member => ({
-        id: member.user.id,
-        name: member.user.name,
-        email: member.user.email,
-        role: member.role
-      }))
+      memberCount: project._count.projectMembers + 1,
+      commentCount: project._count.projectComments
     };
 
     console.log(`✅ [${requestId}] 项目详情查询成功:`, project.id);
@@ -250,12 +273,20 @@ async function handleUpdateProject(req, res, projectId, userId, requestId) {
     }
 
     // 允许更新的字段
-    const allowedUpdates = ['title', 'description', 'content', 'status', 'type', 'visibility'];
+    const allowedUpdates = [
+      'title', 'description', 'content', 'status', 'projectType', 
+      'formattingStatus', 'formattingTemplate', 'currentReviewRound',
+      'allowPublicComments', 'visibility', 'aiFormattedContent'
+    ];
     const updates = {};
     
     Object.keys(updateData).forEach(key => {
       if (allowedUpdates.includes(key) && updateData[key] !== undefined) {
-        updates[key] = updateData[key];
+        if (key === 'isPublic') {
+          updates.visibility = updateData[key] ? 'PUBLIC' : 'PRIVATE';
+        } else {
+          updates[key] = updateData[key];
+        }
       }
     });
 
@@ -278,7 +309,9 @@ async function handleUpdateProject(req, res, projectId, userId, requestId) {
           select: { id: true, name: true, email: true }
         },
         _count: {
-          select: { projectMembers: true }
+          select: {
+            projectMembers: true // 🔧 修复：使用 projectMembers
+          }
         }
       }
     });
@@ -289,14 +322,22 @@ async function handleUpdateProject(req, res, projectId, userId, requestId) {
       title: updatedProject.title,
       description: updatedProject.description,
       content: updatedProject.content,
-      type: updatedProject.type,
+      aiFormattedContent: updatedProject.aiFormattedContent,
+      projectType: updatedProject.projectType,
       status: updatedProject.status,
+      formattingStatus: updatedProject.formattingStatus,
+      formattingTemplate: updatedProject.formattingTemplate,
+      currentReviewRound: updatedProject.currentReviewRound,
+      isPublic: updatedProject.visibility === 'PUBLIC',
+      visibility: updatedProject.visibility,
+      authorId: updatedProject.ownerId,
+      author: updatedProject.owner,
       ownerId: updatedProject.ownerId,
       owner: updatedProject.owner,
       createdAt: updatedProject.createdAt.toISOString(),
       updatedAt: updatedProject.updatedAt.toISOString(),
       isOwner: true,
-      memberCount: updatedProject._count.projectMembers
+      memberCount: updatedProject._count.projectMembers + 1
     };
 
     return res.status(200).json({
@@ -337,6 +378,11 @@ async function handleDeleteProject(req, res, projectId, userId, requestId) {
     await prisma.$transaction(async (tx) => {
       // 删除项目成员
       await tx.projectMember.deleteMany({
+        where: { projectId: projectId }
+      });
+
+      // 删除评论
+      await tx.projectComment.deleteMany({
         where: { projectId: projectId }
       });
 
